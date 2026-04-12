@@ -23,7 +23,7 @@ function DataExplorer() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(200);
   const [orderBy, setOrderBy] = useState('rowid');
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -332,10 +332,10 @@ function DataExplorer() {
         </div>
       </div>
 
-      {/* Data Table */}
-      <div className="overflow-x-auto">
+      {/* Data Table — scrollable container with own sticky header */}
+      <div className="overflow-auto flex-1">
         <table className="w-full text-sm">
-          <thead className="bg-earth-800 sticky top-[52px] z-30">
+          <thead className="bg-earth-800 sticky top-0 z-30">
             <tr>
               <th className="px-3 py-2 text-left text-earth-500 text-xs font-medium w-8">#</th>
               {displayCols.map(col => (
