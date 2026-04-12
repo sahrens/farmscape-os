@@ -414,7 +414,7 @@ export function FarmScene() {
     <div className="w-full h-full">
       <Canvas
         shadows
-        camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position }}
+        camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position as [number, number, number] }}
         gl={{ antialias: true }}
       >
         <Scene />

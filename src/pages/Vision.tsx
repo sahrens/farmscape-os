@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import { useLocation } from 'wouter';
 import farmConfig from '@/farm.config';
 import { DonationBanner } from '@/components/DonationBanner';
 
@@ -96,14 +95,12 @@ function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
-        {/* After (vision) — full background */}
         <img
           src={slide.after}
           alt="Vision"
           className="absolute inset-0 w-full h-full object-cover"
           draggable={false}
         />
-        {/* Before (current) — clipped by slider position */}
         <div
           className="absolute inset-0 overflow-hidden"
           style={{ width: `${position}%` }}
@@ -116,12 +113,10 @@ function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
             draggable={false}
           />
         </div>
-        {/* Slider line */}
         <div
           className="absolute top-0 bottom-0 w-0.5 bg-white/80 shadow-lg"
           style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
         >
-          {/* Handle */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M7 4L3 10L7 16" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -129,7 +124,6 @@ function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
             </svg>
           </div>
         </div>
-        {/* Labels */}
         <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur text-white text-xs px-2 py-1 rounded">
           Now
         </div>
@@ -142,23 +136,8 @@ function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
 }
 
 function Vision() {
-  const [, setLocation] = useLocation();
-
   return (
-    <div className="min-h-screen bg-earth-900 text-earth-100">
-      {/* Header */}
-      <div className="bg-earth-800 border-b border-earth-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setLocation('/')}
-            className="text-earth-400 hover:text-earth-200 text-sm active:scale-95"
-          >
-            ← Map View
-          </button>
-          <h1 className="text-lg font-bold text-forest-300">Vision</h1>
-        </div>
-      </div>
-
+    <div className="flex-1 min-h-0 overflow-y-auto bg-earth-900 text-earth-100">
       {/* Hero */}
       <div className="text-center py-12 px-4 border-b border-earth-800">
         <h1 className="text-4xl font-bold text-amber-400 tracking-wide mb-2">

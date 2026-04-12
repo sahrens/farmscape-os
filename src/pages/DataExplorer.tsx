@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useLocation } from 'wouter';
-import { data, type TableInfo, type ColumnInfo, type QueryResult, type ChangelogEntry } from '@/lib/api';
+import { data, type ColumnInfo, type QueryResult } from '@/lib/api';
 
 const TABLES = ['elements', 'activities', 'observations', 'changelog'];
 
-// Column filter configs per table
 const FILTERABLE_COLUMNS: Record<string, string[]> = {
   elements: ['type', 'subtype', 'status'],
   activities: ['type', 'is_test', 'element_id'],
@@ -13,7 +11,6 @@ const FILTERABLE_COLUMNS: Record<string, string[]> = {
 };
 
 function DataExplorer() {
-  const [, setLocation] = useLocation();
   const [activeTable, setActiveTable] = useState('elements');
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -34,7 +31,6 @@ function DataExplorer() {
   const [sqlError, setSqlError] = useState('');
   const [sqlLoading, setSqlLoading] = useState(false);
 
-  // Load table counts
   useEffect(() => {
     data.tables().then(tables => {
       const counts: Record<string, number> = {};
@@ -43,7 +39,6 @@ function DataExplorer() {
     }).catch(console.error);
   }, []);
 
-  // Load schema when table changes
   useEffect(() => {
     setColumns([]);
     setRows([]);
@@ -54,12 +49,10 @@ function DataExplorer() {
 
     data.schema(activeTable).then(cols => {
       setColumns(cols);
-      // Default visible: all columns except very long ones
       const defaultVisible = new Set(cols.map(c => c.name));
       setVisibleCols(defaultVisible);
     }).catch(console.error);
 
-    // Load filter options
     const filterCols = FILTERABLE_COLUMNS[activeTable] || [];
     filterCols.forEach(col => {
       data.distinct(activeTable, col).then(vals => {
@@ -68,7 +61,6 @@ function DataExplorer() {
     });
   }, [activeTable]);
 
-  // Load data
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -78,7 +70,6 @@ function DataExplorer() {
         order_by: orderBy,
         order_dir: orderDir,
       };
-      // Add filters
       Object.entries(filters).forEach(([k, v]) => {
         if (v) params[k] = v;
       });
@@ -95,7 +86,6 @@ function DataExplorer() {
     if (columns.length > 0) loadData();
   }, [loadData, columns.length]);
 
-  // SQL execution
   const runSql = async () => {
     if (!sqlQuery.trim()) return;
     setSqlLoading(true);
@@ -158,182 +148,171 @@ function DataExplorer() {
     s.length > max ? s.slice(0, max) + '...' : s;
 
   return (
-    <div className="min-h-screen bg-earth-900 text-earth-100">
-      {/* Header */}
-      <div className="bg-earth-800 border-b border-earth-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setLocation('/')}
-            className="text-earth-400 hover:text-earth-200 text-sm active:scale-95"
-          >
-            ← Map View
-          </button>
-          <h1 className="text-lg font-bold text-forest-300">Data Explorer</h1>
-        </div>
-        <button
-          onClick={() => setShowSql(!showSql)}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-            showSql ? 'bg-forest-600 text-white' : 'bg-earth-700 text-earth-300 hover:bg-earth-600'
-          }`}
-        >
-          {showSql ? 'Hide SQL' : 'SQL Editor'}
-        </button>
-      </div>
-
-      {/* SQL Editor Panel */}
-      {showSql && (
-        <div className="bg-earth-850 border-b border-earth-700 p-4 space-y-2">
-          <div className="flex gap-2">
-            <textarea
-              value={sqlQuery}
-              onChange={e => setSqlQuery(e.target.value)}
-              placeholder="SELECT * FROM elements WHERE type = 'tree' LIMIT 10"
-              rows={3}
-              className="flex-1 bg-earth-900 border border-earth-600 rounded-lg px-3 py-2 text-sm text-earth-100 font-mono placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-forest-500 resize-y"
-              onKeyDown={e => {
-                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                  e.preventDefault();
-                  runSql();
-                }
-              }}
-            />
-            <button
-              onClick={runSql}
-              disabled={sqlLoading || !sqlQuery.trim()}
-              className="px-4 py-2 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:text-earth-400 text-white rounded-lg text-sm font-medium self-end active:scale-95"
-            >
-              {sqlLoading ? 'Running...' : 'Run ⌘↵'}
-            </button>
+    <div className="flex-1 flex flex-col min-h-0 bg-earth-900 text-earth-100">
+      {/* Sub-header: SQL toggle + table tabs */}
+      <div className="shrink-0">
+        {/* SQL toggle bar */}
+        <div className="bg-earth-800/50 border-b border-earth-700 px-4 py-2 flex items-center justify-between">
+          <div className="flex gap-2 overflow-x-auto">
+            {TABLES.map(t => (
+              <button
+                key={t}
+                onClick={() => setActiveTable(t)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap active:scale-95 ${
+                  activeTable === t
+                    ? 'bg-forest-600 text-white'
+                    : 'bg-earth-700 text-earth-300 hover:bg-earth-600'
+                }`}
+              >
+                {t} <span className="text-xs opacity-70">({tableCounts[t] || 0})</span>
+              </button>
+            ))}
           </div>
-          {sqlError && (
-            <div className="bg-red-900/30 border border-red-800 rounded-lg px-3 py-2 text-sm text-red-300">
-              {sqlError}
-            </div>
-          )}
-          {sqlResult && (
-            <div className="overflow-x-auto max-h-64 overflow-y-auto rounded-lg border border-earth-700">
-              <table className="w-full text-xs">
-                <thead className="bg-earth-800 sticky top-0">
-                  <tr>
-                    {sqlResult.rows.length > 0 && Object.keys(sqlResult.rows[0]).map(col => (
-                      <th key={col} className="px-3 py-2 text-left text-earth-400 font-medium">{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sqlResult.rows.map((row, i) => (
-                    <tr key={i} className="border-t border-earth-700 hover:bg-earth-800/50">
-                      {Object.values(row).map((val, j) => (
-                        <td key={j} className="px-3 py-1.5 text-earth-200 whitespace-nowrap">
-                          {truncate(formatCell(val), 60)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="px-3 py-1.5 text-xs text-earth-500 bg-earth-800 border-t border-earth-700">
-                {sqlResult.total} row{sqlResult.total !== 1 ? 's' : ''}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Table Tabs */}
-      <div className="bg-earth-800/50 border-b border-earth-700 px-4 py-2 flex gap-2 overflow-x-auto">
-        {TABLES.map(t => (
           <button
-            key={t}
-            onClick={() => setActiveTable(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap active:scale-95 ${
-              activeTable === t
-                ? 'bg-forest-600 text-white'
-                : 'bg-earth-700 text-earth-300 hover:bg-earth-600'
+            onClick={() => setShowSql(!showSql)}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors shrink-0 ml-2 ${
+              showSql ? 'bg-forest-600 text-white' : 'bg-earth-700 text-earth-300 hover:bg-earth-600'
             }`}
           >
-            {t} <span className="text-xs opacity-70">({tableCounts[t] || 0})</span>
+            {showSql ? 'Hide SQL' : 'SQL'}
           </button>
-        ))}
-      </div>
-
-      {/* Filters & Column Picker */}
-      <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-b border-earth-700/50">
-        {/* Column picker */}
-        <div className="relative">
-          <button
-            onClick={() => setShowColPicker(!showColPicker)}
-            className="px-3 py-1.5 bg-earth-700 text-earth-300 hover:bg-earth-600 rounded text-xs font-medium active:scale-95"
-          >
-            Columns ({displayCols.length}/{columns.length})
-          </button>
-          {showColPicker && (
-            <div className="absolute top-full left-0 mt-1 bg-earth-800 border border-earth-600 rounded-lg shadow-xl z-40 p-2 max-h-64 overflow-y-auto min-w-48">
-              <div className="flex gap-2 mb-2 pb-2 border-b border-earth-700">
-                <button
-                  onClick={() => setVisibleCols(new Set(columns.map(c => c.name)))}
-                  className="text-xs text-forest-400 hover:text-forest-300"
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setVisibleCols(new Set(['id', 'name', 'type', 'status', 'created_at']))}
-                  className="text-xs text-forest-400 hover:text-forest-300"
-                >
-                  Minimal
-                </button>
-              </div>
-              {columns.map(col => (
-                <label key={col.name} className="flex items-center gap-2 px-2 py-1 hover:bg-earth-700 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={visibleCols.has(col.name)}
-                    onChange={() => toggleCol(col.name)}
-                    className="rounded border-earth-500"
-                  />
-                  <span className="text-xs text-earth-200">{col.name}</span>
-                  <span className="text-xs text-earth-500 ml-auto">{col.type || 'TEXT'}</span>
-                </label>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Filters */}
-        {filterableCols.map(col => {
-          const options = filterOptions[`${activeTable}.${col}`] || [];
-          return (
-            <select
-              key={col}
-              value={filters[col] || ''}
-              onChange={e => handleFilter(col, e.target.value)}
-              className="px-2 py-1.5 bg-earth-700 border border-earth-600 rounded text-xs text-earth-200 focus:outline-none focus:ring-2 focus:ring-forest-500"
-            >
-              <option value="">{col}: all</option>
-              {options.map(v => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          );
-        })}
-
-        {/* Active filter count */}
-        {Object.keys(filters).length > 0 && (
-          <button
-            onClick={() => { setFilters({}); setPage(0); }}
-            className="px-2 py-1.5 bg-red-900/30 text-red-300 rounded text-xs hover:bg-red-900/50 active:scale-95"
-          >
-            Clear {Object.keys(filters).length} filter{Object.keys(filters).length > 1 ? 's' : ''}
-          </button>
+        {/* SQL Editor Panel */}
+        {showSql && (
+          <div className="bg-earth-850 border-b border-earth-700 p-4 space-y-2">
+            <div className="flex gap-2">
+              <textarea
+                value={sqlQuery}
+                onChange={e => setSqlQuery(e.target.value)}
+                placeholder="SELECT * FROM elements WHERE type = 'tree' LIMIT 10"
+                rows={3}
+                className="flex-1 bg-earth-900 border border-earth-600 rounded-lg px-3 py-2 text-sm text-earth-100 font-mono placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-forest-500 resize-y"
+                onKeyDown={e => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    runSql();
+                  }
+                }}
+              />
+              <button
+                onClick={runSql}
+                disabled={sqlLoading || !sqlQuery.trim()}
+                className="px-4 py-2 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:text-earth-400 text-white rounded-lg text-sm font-medium self-end active:scale-95"
+              >
+                {sqlLoading ? 'Running...' : 'Run ⌘↵'}
+              </button>
+            </div>
+            {sqlError && (
+              <div className="bg-red-900/30 border border-red-800 rounded-lg px-3 py-2 text-sm text-red-300">
+                {sqlError}
+              </div>
+            )}
+            {sqlResult && (
+              <div className="overflow-x-auto max-h-64 overflow-y-auto rounded-lg border border-earth-700">
+                <table className="w-full text-xs">
+                  <thead className="bg-earth-800 sticky top-0">
+                    <tr>
+                      {sqlResult.rows.length > 0 && Object.keys(sqlResult.rows[0]).map(col => (
+                        <th key={col} className="px-3 py-2 text-left text-earth-400 font-medium">{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sqlResult.rows.map((row, i) => (
+                      <tr key={i} className="border-t border-earth-700 hover:bg-earth-800/50">
+                        {Object.values(row).map((val, j) => (
+                          <td key={j} className="px-3 py-1.5 text-earth-200 whitespace-nowrap">
+                            {truncate(formatCell(val), 60)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-3 py-1.5 text-xs text-earth-500 bg-earth-800 border-t border-earth-700">
+                  {sqlResult.total} row{sqlResult.total !== 1 ? 's' : ''}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
-        <div className="ml-auto text-xs text-earth-500">
-          {total} row{total !== 1 ? 's' : ''}{loading ? ' (loading...)' : ''}
+        {/* Filters & Column Picker */}
+        <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-b border-earth-700/50">
+          <div className="relative">
+            <button
+              onClick={() => setShowColPicker(!showColPicker)}
+              className="px-3 py-1.5 bg-earth-700 text-earth-300 hover:bg-earth-600 rounded text-xs font-medium active:scale-95"
+            >
+              Columns ({displayCols.length}/{columns.length})
+            </button>
+            {showColPicker && (
+              <div className="absolute top-full left-0 mt-1 bg-earth-800 border border-earth-600 rounded-lg shadow-xl z-40 p-2 max-h-64 overflow-y-auto min-w-48">
+                <div className="flex gap-2 mb-2 pb-2 border-b border-earth-700">
+                  <button
+                    onClick={() => setVisibleCols(new Set(columns.map(c => c.name)))}
+                    className="text-xs text-forest-400 hover:text-forest-300"
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setVisibleCols(new Set(['id', 'name', 'type', 'status', 'created_at']))}
+                    className="text-xs text-forest-400 hover:text-forest-300"
+                  >
+                    Minimal
+                  </button>
+                </div>
+                {columns.map(col => (
+                  <label key={col.name} className="flex items-center gap-2 px-2 py-1 hover:bg-earth-700 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={visibleCols.has(col.name)}
+                      onChange={() => toggleCol(col.name)}
+                      className="rounded border-earth-500"
+                    />
+                    <span className="text-xs text-earth-200">{col.name}</span>
+                    <span className="text-xs text-earth-500 ml-auto">{col.type || 'TEXT'}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {filterableCols.map(col => {
+            const options = filterOptions[`${activeTable}.${col}`] || [];
+            return (
+              <select
+                key={col}
+                value={filters[col] || ''}
+                onChange={e => handleFilter(col, e.target.value)}
+                className="px-2 py-1.5 bg-earth-700 border border-earth-600 rounded text-xs text-earth-200 focus:outline-none focus:ring-2 focus:ring-forest-500"
+              >
+                <option value="">{col}: all</option>
+                {options.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            );
+          })}
+
+          {Object.keys(filters).length > 0 && (
+            <button
+              onClick={() => { setFilters({}); setPage(0); }}
+              className="px-2 py-1.5 bg-red-900/30 text-red-300 rounded text-xs hover:bg-red-900/50 active:scale-95"
+            >
+              Clear {Object.keys(filters).length} filter{Object.keys(filters).length > 1 ? 's' : ''}
+            </button>
+          )}
+
+          <div className="ml-auto text-xs text-earth-500">
+            {total} row{total !== 1 ? 's' : ''}{loading ? ' (loading...)' : ''}
+          </div>
         </div>
       </div>
 
-      {/* Data Table — scrollable container with own sticky header */}
-      <div className="overflow-auto flex-1">
+      {/* Data Table — scrollable area fills remaining space, sticky header at top of this container */}
+      <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-sm">
           <thead className="bg-earth-800 sticky top-0 z-30">
             <tr>
@@ -413,7 +392,7 @@ function DataExplorer() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="px-4 py-3 flex items-center justify-between border-t border-earth-700 bg-earth-800/50 sticky bottom-0">
+        <div className="px-4 py-3 flex items-center justify-between border-t border-earth-700 bg-earth-800/50 shrink-0">
           <button
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={page === 0}

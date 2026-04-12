@@ -46,7 +46,7 @@ function GpsDisplay({ el }: { el: FarmElement }) {
   const geo = farmConfig.geoReference;
   if (!geo) return null;
 
-  const { lat, lng } = localToGps(el.x, el.y, geo.origin, geo.bearing, farmConfig.unit);
+  const { lat, lng } = localToGps(el.x, el.y, geo.origin, geo.bearing, farmConfig.unit as 'ft' | 'm');
   const url = googleMapsUrl(lat, lng);
 
   return (
@@ -386,8 +386,9 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <>
+      {/* Transparent click-catcher — no bg color so the 3D canvas stays visible */}
       <div
-        className="absolute inset-0 bg-black/40 z-40"
+        className="absolute inset-0 z-40"
         onClick={onClose}
       />
       <div
