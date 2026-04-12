@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig from '@/farm.config';
@@ -39,6 +39,41 @@ function useIsMobile() {
     return () => window.removeEventListener('resize', handler);
   }, []);
   return isMobile;
+}
+
+/** GPS coordinate display helper */
+function GpsDisplay({ el }: { el: FarmElement }) {
+  const geo = farmConfig.geoReference;
+  if (!geo) return null;
+
+  const FT_TO_M = 0.3048;
+  const dx = el.x * FT_TO_M;
+  const dy = el.y * FT_TO_M;
+  const bearing = (geo.bearing * Math.PI) / 180;
+  const cosB = Math.cos(bearing);
+  const sinB = Math.sin(bearing);
+  // Rotate local coords by bearing
+  const dN = dy * cosB - dx * sinB;
+  const dE = dy * sinB + dx * cosB;
+  // Convert meters offset to lat/lng
+  const lat = geo.origin.lat + dN / 111320;
+  const lng = geo.origin.lng + dE / (111320 * Math.cos((geo.origin.lat * Math.PI) / 180));
+
+  const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+
+  return (
+    <div>
+      <span className="text-earth-400">GPS</span>
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block text-forest-400 hover:text-forest-300 text-xs font-mono underline"
+      >
+        {lat.toFixed(6)}, {lng.toFixed(6)}
+      </a>
+    </div>
+  );
 }
 
 function ElementRow({ el }: { el: FarmElement }) {
@@ -199,6 +234,7 @@ function ElementDetail({ el }: { el: FarmElement }) {
               <div className="text-earth-100">{el.elevation} {u}</div>
             </div>
           )}
+          <GpsDisplay el={el} />
         </div>
       </div>
 
@@ -331,6 +367,68 @@ function SidebarContent() {
   );
 }
 
+/** Mobile bottom sheet with drag-to-dismiss */
+function MobileSheet({ onClose }: { onClose: () => void }) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({ startY: 0, currentY: 0, dragging: false });
+  const [translateY, setTranslateY] = useState(0);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    dragRef.current.startY = e.touches[0].clientY;
+    dragRef.current.dragging = true;
+    setTranslateY(0);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!dragRef.current.dragging) return;
+    const dy = e.touches[0].clientY - dragRef.current.startY;
+    // Only allow dragging down (positive dy)
+    if (dy > 0) {
+      setTranslateY(dy);
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    dragRef.current.dragging = false;
+    // Dismiss if dragged more than 100px down
+    if (translateY > 100) {
+      onClose();
+    } else {
+      setTranslateY(0);
+    }
+  }, [translateY, onClose]);
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/40 z-40"
+        onClick={onClose}
+      />
+      <div
+        ref={sheetRef}
+        className="fixed bottom-0 left-0 right-0 z-50 bg-earth-800 border-t border-earth-700 rounded-t-2xl shadow-2xl flex flex-col"
+        style={{
+          maxHeight: '60vh',
+          transform: `translateY(${translateY}px)`,
+          transition: translateY === 0 ? 'transform 0.2s ease-out' : 'none',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div
+          className="flex justify-center pt-2 pb-1 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="w-10 h-1 bg-earth-600 rounded-full" />
+        </div>
+        <SidebarContent />
+      </div>
+    </>
+  );
+}
+
 export function Sidebar() {
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
@@ -348,24 +446,7 @@ export function Sidebar() {
   }
 
   if (isMobile) {
-    return (
-      <>
-        <div
-          className="fixed inset-0 bg-black/40 z-40"
-          onClick={() => setSidebarOpen(false)}
-        />
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 bg-earth-800 border-t border-earth-700 rounded-t-2xl shadow-2xl flex flex-col"
-          style={{ maxHeight: '85vh' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex justify-center pt-2 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-earth-600 rounded-full" />
-          </div>
-          <SidebarContent />
-        </div>
-      </>
-    );
+    return <MobileSheet onClose={() => setSidebarOpen(false)} />;
   }
 
   return (

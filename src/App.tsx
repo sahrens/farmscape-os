@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Toolbar } from '@/components/Toolbar';
 
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
+const Vision = lazy(() => import('@/pages/Vision'));
 
 function Dashboard() {
   const fetchElements = useStore(s => s.fetchElements);
@@ -75,6 +76,7 @@ export default function App() {
       }>
         <Switch>
           <Route path="/data" component={DataExplorer} />
+          <Route path="/vision" component={Vision} />
           <Route path="/" component={Dashboard} />
         </Switch>
       </Suspense>

@@ -48,6 +48,12 @@ export interface FarmConfig {
   // Human-readable labels for subtypes
   subtypeLabels?: Record<string, string>;
 
+  // Geo-reference: maps local coordinates to GPS
+  geoReference?: {
+    origin: { lat: number; lng: number }; // GPS of local coordinate origin (0,0)
+    bearing: number; // Degrees CW from true north to local y-axis
+  };
+
   // Donation configuration
   donation?: {
     farmUrl?: string;
