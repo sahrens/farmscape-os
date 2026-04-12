@@ -1,12 +1,12 @@
 /**
  * Example Farm Configuration — Copy and customize for your property
  *
- * 1. Copy this file: `cp example.config.ts myfarm.config.ts`
+ * 1. Copy this file: `cp example.config.ts local.config.ts`
  * 2. Fill in your property details below
- * 3. Update `src/farm.config.ts` to import your new config
+ * 3. Build and deploy — farm.config.ts auto-detects local.config.ts
  * 4. Seed your D1 database with your elements (see README)
  */
-import type { FarmConfig } from '../farm.config';
+import type { FarmConfig } from '../farm.config.types';
 
 const myFarm: FarmConfig = {
   // ─── Identity ───
