@@ -34,7 +34,7 @@ Interactive 3D property viewer, element tracking, activity logging, data explore
 | API | Cloudflare Workers (TypeScript) |
 | Database | Cloudflare D1 (SQLite at edge) |
 | Auth | Simple password with HttpOnly cookie |
-| Hosting | Cloudflare Pages + Workers |
+| Hosting | Cloudflare Workers (serves both API and static assets at edge) |
 
 Zero external dependencies beyond Cloudflare. No Node server, no traditional database.
 
@@ -140,9 +140,14 @@ npx wrangler d1 execute farmscapeos-db --file=schema.sql
 ### 5. Set the auth password
 
 ```bash
+# Interactive (prompts for value):
 npx wrangler secret put AUTH_PASSWORD
-# Enter your chosen password when prompted
+
+# Or pipe it in (IMPORTANT: use printf, not echo — echo adds a trailing newline):
+printf 'yourpassword' | npx wrangler secret put AUTH_PASSWORD
 ```
+
+> **Note:** After setting a secret on a newly created worker, you must redeploy (`npx wrangler deploy`) for the secret to take effect. If login returns "Invalid password" after setting the secret, redeploy and try again.
 
 ### 6. Seed your elements
 
@@ -158,7 +163,9 @@ pnpm run build
 npx wrangler deploy
 ```
 
-Your app is live at `https://farmscapeos.<your-subdomain>.workers.dev`
+Your app is live at `https://<worker-name>.<your-subdomain>.workers.dev`
+
+The URL is determined by the `name` field in `wrangler.toml` and your Cloudflare account's Workers subdomain. Keep the worker name short (e.g. `app`, `farm`) for a clean URL.
 
 ### 8. Local development
 
@@ -324,6 +331,18 @@ donation: {
   upstreamUrl: 'https://github.com/sponsors/sahrens',
 },
 ```
+
+---
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Login returns "Invalid password" | Secret has trailing newline (from `echo`) or worker needs redeploy | Re-set with `printf 'pw' \| wrangler secret put AUTH_PASSWORD`, then `wrangler deploy` |
+| Login returns "Unauthorized" | Hitting wrong endpoint | Correct endpoint is `POST /api/auth/login` with JSON body `{"password":"..."}` |
+| Secret not taking effect | New worker hasn't been redeployed after secret was set | Run `wrangler deploy` after setting the secret |
+| Deploy goes to wrong account | Wrangler account cache | `rm -rf node_modules/.cache/wrangler` then redeploy |
+| "0 files uploaded" but changes missing | Stale wrangler cache | Clear cache and redeploy |
 
 ---
 
