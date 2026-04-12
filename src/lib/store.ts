@@ -127,7 +127,7 @@ export const useStore = create<FarmStore>((set, get) => ({
   setView: (v) => set({ view: v }),
 
   // Sidebar
-  sidebarOpen: true,
+  sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   // Filter

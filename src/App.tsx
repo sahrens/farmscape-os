@@ -19,10 +19,12 @@ function Dashboard() {
   }, [fetchElements]);
 
   return (
-    <div className="h-full w-full relative overflow-hidden">
-      {/* 3D scene always fills full screen */}
-      <div className="absolute inset-0">
-        <Toolbar />
+    <div className="h-full w-full relative overflow-hidden flex flex-col">
+      {/* Unified nav bar at the top */}
+      <Toolbar />
+
+      {/* 3D scene fills remaining space below nav bar */}
+      <div className="relative flex-1 min-h-0">
         {elementsLoading && elements.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-earth-400 text-lg">Loading elements...</div>
@@ -34,10 +36,10 @@ function Dashboard() {
         <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700">
           {elements.length} elements
         </div>
-      </div>
 
-      {/* Sidebar handles its own mobile/desktop layout */}
-      <Sidebar />
+        {/* Sidebar handles its own mobile/desktop layout */}
+        <Sidebar />
+      </div>
     </div>
   );
 }

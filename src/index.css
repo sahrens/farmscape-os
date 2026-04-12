@@ -34,13 +34,18 @@
   --color-sunset-400: oklch(0.72 0.12 30);
 }
 
-html, body, #root {
+html, body {
   height: 100dvh;
   height: 100vh; /* fallback */
   margin: 0;
   padding: 0;
   overflow: hidden;
   touch-action: manipulation;
+}
+
+#root {
+  height: 100%;
+  overflow: auto;
 }
 
 body {
