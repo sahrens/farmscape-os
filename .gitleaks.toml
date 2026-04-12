@@ -1,0 +1,64 @@
+# FarmscapeOS — Gitleaks Configuration
+# https://github.com/gitleaks/gitleaks
+#
+# This extends gitleaks' 800+ built-in secret detection rules with
+# project-specific patterns. The built-in rules already catch:
+#   - AWS keys (AKIA...), GCP keys, Azure keys
+#   - GitHub tokens (ghp_, gho_, ghs_), GitLab tokens (glpat-)
+#   - OpenAI keys (sk-), Stripe keys (sk_live_, pk_live_)
+#   - Slack tokens (xoxb-, xoxp-), SendGrid (SG.)
+#   - Private keys (PEM blocks), JWTs (eyJ...)
+#   - Generic high-entropy secrets
+#   - And hundreds more: https://github.com/gitleaks/gitleaks#rules
+
+title = "FarmscapeOS Secret Detection"
+
+# --- Custom rules for this project ---
+
+[[rules]]
+id = "cloudflare-api-key"
+description = "Cloudflare API Key"
+regex = '''cfk_[a-zA-Z0-9]{20,}'''
+tags = ["cloudflare", "api-key"]
+
+[[rules]]
+id = "cloudflare-account-id"
+description = "Cloudflare Account ID (32-char hex)"
+regex = '''account_id\s*=\s*["']?[a-f0-9]{32}["']?'''
+tags = ["cloudflare", "config"]
+
+[[rules]]
+id = "d1-database-id"
+description = "Cloudflare D1 Database ID (UUID)"
+regex = '''database_id\s*=\s*["']?[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}["']?'''
+tags = ["cloudflare", "database"]
+
+[[rules]]
+id = "hardcoded-password"
+description = "Hardcoded password assignment"
+regex = '''(?i)(password|passwd|pwd)\s*[:=]\s*["'][^"']{4,}["']'''
+tags = ["password"]
+
+[[rules]]
+id = "webhook-url"
+description = "Webhook URL (Slack, Discord, etc.)"
+regex = '''https://(hooks\.slack\.com|discord\.com/api/webhooks|webhook\.site)/\S+'''
+tags = ["webhook"]
+
+[[rules]]
+id = "private-ip"
+description = "Private IP address in config"
+regex = '''(?:^|\s)(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?:\s|$|[:"'])'''
+tags = ["network"]
+
+# --- Allowlist: paths and patterns that are OK ---
+
+[allowlist]
+description = "Files and patterns that are safe to commit"
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''\.githooks/''',
+  '''README\.md$''',
+  '''CONTRIBUTING\.md$''',
+  '''\.secret-patterns\.example$''',
+]

@@ -83,6 +83,9 @@ The agent will walk you through the full setup interactively.
 git clone https://github.com/sahrens/farmscape-os.git
 cd farmscape-os
 pnpm install
+
+# Enable the secret-detection pre-commit hook
+git config core.hooksPath .githooks
 ```
 
 ### 2. Create your farm config
@@ -321,6 +324,34 @@ donation: {
   upstreamUrl: 'https://github.com/sponsors/sahrens',
 },
 ```
+
+---
+
+## Security: Secret Detection
+
+FarmscapeOS includes a pre-commit hook that prevents accidental leaks of private data. It combines:
+
+1. **[gitleaks](https://github.com/gitleaks/gitleaks)** — 800+ built-in rules for API keys, tokens, passwords, private keys, JWTs, and more, plus custom rules in `.gitleaks.toml` for Cloudflare-specific patterns
+2. **Forbidden path checks** — blocks commits containing `.env`, `.pem`, `.key`, `db-snapshots/`, and other sensitive files
+3. **Custom patterns** (`.secret-patterns`) — add your own farm-specific terms (property name, address, personal info) that should never appear in the OSS repo
+
+### Setup
+
+```bash
+# Enable the hook (run once after cloning)
+git config core.hooksPath .githooks
+
+# Install gitleaks
+brew install gitleaks          # macOS
+sudo apt install gitleaks      # Debian/Ubuntu
+go install github.com/gitleaks/gitleaks/v8@latest  # Go
+
+# Create your personal secret patterns (gitignored)
+cp .secret-patterns.example .secret-patterns
+# Edit .secret-patterns with your farm name, address, email, etc.
+```
+
+The hook runs automatically on every `git commit`. To bypass for false positives: `git commit --no-verify`.
 
 ---
 

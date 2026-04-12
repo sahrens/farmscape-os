@@ -27,6 +27,17 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Private/sensitive files
+.secret-patterns
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+
 # Farm-specific files — keep out of the OSS repo
 db-snapshots/
 src/farms/*.config.ts
