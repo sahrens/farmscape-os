@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig from '@/farm.config';
+import { localToGps, formatGps, googleMapsUrl } from '@/lib/geo';
 
 const ACTIVITY_TYPES = [
   { value: 'watering', label: 'Watering', icon: '💧' },
@@ -27,7 +28,6 @@ function getSubtypeLabel(subtype: string | null): string {
   if (!subtype) return '';
   const labels = farmConfig.subtypeLabels || {};
   if (labels[subtype]) return labels[subtype];
-  // Auto-format: snake_case → Title Case
   return subtype.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
@@ -41,36 +41,24 @@ function useIsMobile() {
   return isMobile;
 }
 
-/** GPS coordinate display helper */
+/** GPS coordinate display helper — uses shared geo utilities */
 function GpsDisplay({ el }: { el: FarmElement }) {
   const geo = farmConfig.geoReference;
   if (!geo) return null;
 
-  const FT_TO_M = 0.3048;
-  const dx = el.x * FT_TO_M;
-  const dy = el.y * FT_TO_M;
-  const bearing = (geo.bearing * Math.PI) / 180;
-  const cosB = Math.cos(bearing);
-  const sinB = Math.sin(bearing);
-  // Rotate local coords by bearing
-  const dN = dy * cosB - dx * sinB;
-  const dE = dy * sinB + dx * cosB;
-  // Convert meters offset to lat/lng
-  const lat = geo.origin.lat + dN / 111320;
-  const lng = geo.origin.lng + dE / (111320 * Math.cos((geo.origin.lat * Math.PI) / 180));
-
-  const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+  const { lat, lng } = localToGps(el.x, el.y, geo.origin, geo.bearing, farmConfig.unit);
+  const url = googleMapsUrl(lat, lng);
 
   return (
     <div>
       <span className="text-earth-400">GPS</span>
       <a
-        href={mapsUrl}
+        href={url}
         target="_blank"
         rel="noopener noreferrer"
         className="block text-forest-400 hover:text-forest-300 text-xs font-mono underline"
       >
-        {lat.toFixed(6)}, {lng.toFixed(6)}
+        {formatGps(lat, lng)}
       </a>
     </div>
   );
@@ -304,7 +292,7 @@ function SidebarContent() {
 
   return (
     <>
-      {/* Header — reads name from config */}
+      {/* Header */}
       <div className="px-4 py-3 border-b border-earth-700 flex items-center justify-between shrink-0">
         <h1 className="text-lg font-bold text-forest-300">{farmConfig.name}</h1>
         <button
@@ -382,7 +370,6 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!dragRef.current.dragging) return;
     const dy = e.touches[0].clientY - dragRef.current.startY;
-    // Only allow dragging down (positive dy)
     if (dy > 0) {
       setTranslateY(dy);
     }
@@ -390,8 +377,7 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
 
   const handleTouchEnd = useCallback(() => {
     dragRef.current.dragging = false;
-    // Dismiss if dragged more than 100px down
-    if (translateY > 100) {
+    if (translateY > 80) {
       onClose();
     } else {
       setTranslateY(0);
@@ -401,14 +387,14 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/40 z-40"
+        className="absolute inset-0 bg-black/40 z-40"
         onClick={onClose}
       />
       <div
         ref={sheetRef}
-        className="fixed bottom-0 left-0 right-0 z-50 bg-earth-800 border-t border-earth-700 rounded-t-2xl shadow-2xl flex flex-col"
+        className="absolute bottom-0 left-0 right-0 z-50 bg-earth-800 border-t border-earth-700 rounded-t-2xl shadow-2xl flex flex-col"
         style={{
-          maxHeight: '60vh',
+          maxHeight: '45vh',
           transform: `translateY(${translateY}px)`,
           transition: translateY === 0 ? 'transform 0.2s ease-out' : 'none',
         }}
@@ -429,24 +415,28 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * Sidebar — renders as a desktop side panel or mobile bottom sheet.
+ * The toggle button is now in the NavBar (Toolbar), so this component
+ * only renders when sidebarOpen is true.
+ */
 export function Sidebar() {
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
   const isMobile = useIsMobile();
 
-  if (!sidebarOpen) {
-    return (
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="absolute top-4 left-4 z-40 bg-earth-800 hover:bg-earth-700 text-earth-200 px-3 py-2 rounded-lg shadow-lg border border-earth-600 text-sm active:scale-95"
-      >
-        ☰ Elements
-      </button>
-    );
-  }
+  const handleClose = useCallback(() => {
+    setSidebarOpen(false);
+    // Trigger resize so Three.js canvas recalculates its dimensions
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+  }, [setSidebarOpen]);
+
+  if (!sidebarOpen) return null;
 
   if (isMobile) {
-    return <MobileSheet onClose={() => setSidebarOpen(false)} />;
+    return <MobileSheet onClose={handleClose} />;
   }
 
   return (
