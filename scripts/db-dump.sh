@@ -55,7 +55,6 @@ done
 cat > "$SNAPSHOT_DIR/_meta.json" << EOF
 {
   "exported_at": "$TIMESTAMP",
-  "database_id": "$DB_ID",
   "tables": $(printf '%s\n' "${TABLES[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin]))")
 }
 EOF
