@@ -1,79 +1,31 @@
 /**
- * FarmscapeOS — Farm Configuration
+ * FarmscapeOS — Farm Configuration Loader
  *
- * This file re-exports the active farm configuration.
- * To switch farms, change the import below.
+ * Automatically loads your farm config if it exists at `src/farms/local.config.ts`.
+ * Falls back to the example config if no local config is found.
  *
- * To create your own farm config, copy `src/farms/example.config.ts`
- * and update the values for your property.
+ * Setup for your own farm:
+ *   1. Run `pnpm run init` to generate a config interactively, OR
+ *   2. Copy `src/farms/example.config.ts` → `src/farms/local.config.ts` and edit it
+ *
+ * For the private-repo pattern (symlink):
+ *   ln -s ../../your-farm.config.ts farmscape-os/src/farms/local.config.ts
  */
 
-export interface FarmConfig {
-  // Identity
-  name: string;
-  subtitle?: string;
-  address?: string;
+// Re-export types for convenience
+export type { FarmConfig } from './farm.config.types';
+export { DEFAULT_COLORS } from './farm.config.types';
 
-  // Units
-  unit: 'ft' | 'm';
-  unitLabel: string;
+// Vite eager glob: resolved at build time.
+// If src/farms/local.config.ts exists (file or symlink), it's included.
+const localModules = import.meta.glob('./farms/local.config.ts', { eager: true }) as Record<
+  string,
+  { default: import('./farm.config.types').FarmConfig }
+>;
 
-  // Property boundary polygon (in local coordinate system)
-  boundary: Array<{ x: number; y: number; label?: string }>;
-
-  // Optional secondary boundary lines (clearing edges, zones, etc.)
-  overlays?: Array<{
-    name: string;
-    points: Array<{ x: number; y: number }>;
-    color?: string;
-    opacity?: number;
-  }>;
-
-  // Camera defaults for the 3D viewer
-  camera: {
-    position: [number, number, number];
-    target: [number, number, number];
-    far?: number;
-  };
-
-  // Ground plane sizing (centered on the property)
-  ground: {
-    center: [number, number];
-    size: [number, number];
-  };
-
-  // Color overrides for element subtypes (hex colors)
-  colors?: Record<string, string>;
-
-  // Human-readable labels for subtypes
-  subtypeLabels?: Record<string, string>;
-
-  // Geo-reference: maps local coordinates to GPS
-  geoReference?: {
-    origin: { lat: number; lng: number }; // GPS of local coordinate origin (0,0)
-    bearing: number; // Degrees CW from true north to local y-axis
-  };
-
-  // Donation configuration
-  donation?: {
-    farmUrl?: string;
-    farmLabel?: string;
-    upstreamPercent?: number;
-    upstreamUrl?: string;
-  };
-}
-
-// ─── Default color palette for common element types/subtypes ───
-export const DEFAULT_COLORS: Record<string, string> = {
-  structure: '#8B4513',
-  tree: '#228B22',
-  zone: '#DAA520',
-  infrastructure: '#808080',
-};
-
-// ─── Active farm configuration ───
-// Change this import to switch to your farm config.
-// Copy src/farms/example.config.ts → src/farms/myfarm.config.ts,
-// customize it, then update this import.
 import example from './farms/example.config';
-export default example;
+
+const localModule = localModules['./farms/local.config.ts'];
+const config = localModule ? localModule.default : example;
+
+export default config;
