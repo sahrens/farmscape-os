@@ -1,0 +1,12 @@
+name = "farmscape-os"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+assets = { directory = "./dist" }
+
+[[d1_databases]]
+binding = "DB"
+database_name = "farmscape-os-db"
+database_id = "YOUR_D1_DATABASE_ID_HERE"
+
+# AUTH_PASSWORD is stored as a Cloudflare secret, NOT in this file.
+# Set it with: npx wrangler secret put AUTH_PASSWORD

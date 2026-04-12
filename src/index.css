@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --color-earth-900: oklch(0.22 0.02 60);
+  --color-earth-800: oklch(0.30 0.03 55);
+  --color-earth-700: oklch(0.38 0.04 50);
+  --color-earth-600: oklch(0.46 0.05 45);
+  --color-earth-500: oklch(0.54 0.06 40);
+  --color-earth-400: oklch(0.62 0.05 45);
+  --color-earth-300: oklch(0.72 0.04 50);
+  --color-earth-200: oklch(0.82 0.03 55);
+  --color-earth-100: oklch(0.92 0.02 60);
+  --color-earth-50: oklch(0.96 0.01 60);
+
+  --color-forest-900: oklch(0.22 0.05 150);
+  --color-forest-800: oklch(0.30 0.07 148);
+  --color-forest-700: oklch(0.38 0.09 146);
+  --color-forest-600: oklch(0.46 0.10 144);
+  --color-forest-500: oklch(0.54 0.11 142);
+  --color-forest-400: oklch(0.62 0.10 144);
+  --color-forest-300: oklch(0.72 0.08 146);
+  --color-forest-200: oklch(0.82 0.06 148);
+  --color-forest-100: oklch(0.92 0.03 150);
+  --color-forest-50: oklch(0.96 0.02 150);
+
+  --color-sky-500: oklch(0.65 0.12 230);
+  --color-sky-400: oklch(0.72 0.10 230);
+
+  --color-vanilla-500: oklch(0.78 0.08 90);
+  --color-vanilla-400: oklch(0.85 0.06 90);
+  --color-vanilla-300: oklch(0.90 0.04 90);
+
+  --color-sunset-500: oklch(0.65 0.15 30);
+  --color-sunset-400: oklch(0.72 0.12 30);
+}
+
+html, body, #root {
+  height: 100dvh;
+  height: 100vh; /* fallback */
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-earth-900);
+  color: var(--color-earth-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-earth-900);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-earth-600);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-earth-500);
+}
