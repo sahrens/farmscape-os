@@ -72,7 +72,8 @@ async function getSessionUser(request: Request, db: D1Database): Promise<Session
   return { id: row.id, email: row.email, name: row.name, role: row.role as UserRole };
 }
 
-async function sendOtpEmail(email: string, code: string, farmName: string, apiKey: string): Promise<boolean> {
+async function sendOtpEmail(email: string, code: string, farmName: string, siteUrl: string, apiKey: string): Promise<boolean> {
+  const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(email)}&code=${code}`;
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -83,13 +84,15 @@ async function sendOtpEmail(email: string, code: string, farmName: string, apiKe
       body: JSON.stringify({
         from: `Eva & Spencer <onboarding@resend.dev>`,
         to: [email],
-        subject: `${farmName} — Your login code is ${code}`,
-        text: `Hi there!\n\nYour one-time login code for ${farmName} is:\n\n  ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, you can safely ignore this email.\n\n— Eva & Spencer`,
+        subject: `${farmName} — Tap to log in`,
+        text: `Hi there!\n\nTap this link to log in to ${farmName}:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Eva & Spencer`,
         html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
   <h2 style="color: #2d5016; margin: 0 0 8px;">🌿 ${farmName}</h2>
-  <p style="color: #666; margin: 0 0 24px;">Your login code:</p>
-  <div style="background: #f4f7f0; border: 2px solid #2d5016; border-radius: 12px; padding: 24px; text-align: center; margin: 0 0 24px;">
-    <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #2d5016; font-family: monospace;">${code}</span>
+  <p style="color: #666; margin: 0 0 24px;">Tap the button to log in:</p>
+  <a href="${magicLink}" style="display: inline-block; background: #2d5016; color: white; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-weight: 600; font-size: 18px; margin: 0 0 24px;">Log in to ${farmName}</a>
+  <p style="color: #999; font-size: 14px; margin: 0 0 8px;">Or enter this code manually:</p>
+  <div style="background: #f4f7f0; border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; margin: 0 0 24px;">
+    <span style="font-size: 24px; font-weight: 700; letter-spacing: 6px; color: #2d5016; font-family: monospace;">${code}</span>
   </div>
   <p style="color: #999; font-size: 14px; margin: 0;">Expires in 10 minutes. If you didn't request this, just ignore it.</p>
   <p style="color: #999; font-size: 14px; margin: 16px 0 0;">— Eva & Spencer</p>
@@ -207,8 +210,9 @@ export default {
       ).bind(normalizedEmail, code, expiresAt).run();
 
       // Send email
-      const farmName = 'Kahiliholo Farm'; // Could be made configurable
-      const sent = await sendOtpEmail(normalizedEmail, code, farmName, env.RESEND_API_KEY);
+      const farmName = 'Kahiliholo Farm';
+      const siteUrl = url.origin;
+      const sent = await sendOtpEmail(normalizedEmail, code, farmName, siteUrl, env.RESEND_API_KEY);
       if (!sent) {
         return json({ error: 'Failed to send email. Please try again.' }, 500);
       }
@@ -270,6 +274,71 @@ export default {
           'Content-Type': 'application/json',
           'Set-Cookie': sessionCookie(token),
           ...corsHeaders(),
+        },
+      });
+    }
+
+    // Magic link — GET /auth/verify?email=...&code=... → verify OTP, set cookie, redirect
+    if (path === '/auth/verify' && request.method === 'GET') {
+      const email = url.searchParams.get('email');
+      const code = url.searchParams.get('code');
+      if (!email || !code) {
+        return new Response('Missing email or code', { status: 400 });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Find valid OTP
+      const otp = await env.DB.prepare(
+        `SELECT id FROM otp_codes WHERE email = ? AND code = ? AND expires_at > datetime('now') AND used = 0`
+      ).bind(normalizedEmail, code).first<{ id: number }>();
+
+      if (!otp) {
+        // Redirect to login with error — link expired or already used
+        return new Response(null, {
+          status: 302,
+          headers: { Location: '/?error=expired' },
+        });
+      }
+
+      // Mark OTP as used
+      await env.DB.prepare('UPDATE otp_codes SET used = 1 WHERE id = ?').bind(otp.id).run();
+
+      // Get user
+      const user = await env.DB.prepare('SELECT id, name, role, status FROM users WHERE email = ?')
+        .bind(normalizedEmail).first<{ id: string; name: string | null; role: string; status: string }>();
+
+      if (!user) {
+        return new Response(null, { status: 302, headers: { Location: '/?error=not_found' } });
+      }
+
+      // Activate on first login
+      if (user.status === 'invited') {
+        await env.DB.prepare("UPDATE users SET status = 'active' WHERE id = ?").bind(user.id).run();
+      }
+
+      // Update last_login
+      await env.DB.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").bind(user.id).run();
+
+      // Create session
+      const token = generateToken();
+      const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+      await env.DB.prepare(
+        `INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`
+      ).bind(token, user.id, expiresAt).run();
+
+      // Clean up old OTPs
+      await env.DB.prepare(
+        `DELETE FROM otp_codes WHERE email = ? AND (used = 1 OR expires_at < datetime('now'))`
+      ).bind(normalizedEmail).run();
+
+      // Redirect to home (or name setup if first login)
+      const redirectTo = user.name ? '/' : '/?setup=name';
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: redirectTo,
+          'Set-Cookie': sessionCookie(token),
         },
       });
     }

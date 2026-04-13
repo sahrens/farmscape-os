@@ -1,16 +1,17 @@
 /**
- * Convert local farm coordinates (feet or meters) to GPS lat/lng.
+ * Convert local farm coordinates to GPS lat/lng.
  *
  * The farm coordinate system has:
  *   - Origin at a known GPS point (e.g. SW corner pipe)
  *   - x-axis pointing roughly east, y-axis pointing roughly north
  *   - A bearing angle rotating the local y-axis from true north
+ *   - A scale factor (meters per local unit) calibrated from known GPS points
  *
  * @param x  Local x coordinate (in farm units)
  * @param y  Local y coordinate (in farm units)
  * @param origin  GPS coordinates of the local origin (0,0)
  * @param bearing  Degrees clockwise from true north to local y-axis
- * @param unit  'ft' or 'm'
+ * @param metersPerUnit  Calibrated scale: meters per local coordinate unit
  * @returns { lat, lng } in decimal degrees
  */
 export function localToGps(
@@ -18,12 +19,10 @@ export function localToGps(
   y: number,
   origin: { lat: number; lng: number },
   bearing: number,
-  unit: 'ft' | 'm' = 'ft',
+  metersPerUnit: number,
 ): { lat: number; lng: number } {
-  // Convert to meters
-  const scale = unit === 'ft' ? 0.3048 : 1;
-  const xm = x * scale;
-  const ym = y * scale;
+  const xm = x * metersPerUnit;
+  const ym = y * metersPerUnit;
 
   // Rotate local coords to true north/east
   const rad = (bearing * Math.PI) / 180;
@@ -53,7 +52,7 @@ export function gpsToLocal(
   lng: number,
   origin: { lat: number; lng: number },
   bearing: number,
-  unit: 'ft' | 'm' = 'ft',
+  metersPerUnit: number,
 ): { x: number; y: number } {
   // Convert degree deltas to meters
   const dLat = lat - origin.lat;
@@ -70,11 +69,9 @@ export function gpsToLocal(
   const xm = dE * cosB - dN * sinB;
   const ym = dN * cosB + dE * sinB;
 
-  // Convert meters to local units
-  const scale = unit === 'ft' ? 0.3048 : 1;
   return {
-    x: xm / scale,
-    y: ym / scale,
+    x: xm / metersPerUnit,
+    y: ym / metersPerUnit,
   };
 }
 

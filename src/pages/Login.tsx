@@ -18,6 +18,21 @@ export function Login() {
   const cooldownRef = useRef<ReturnType<typeof setInterval>>();
   const codeInputRef = useRef<HTMLInputElement>(null);
 
+  // Handle ?error= query param from magic link redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err === 'expired') {
+      setError('Link expired or already used. Please request a new one.');
+    } else if (err === 'not_found') {
+      setError('Account not found.');
+    }
+    // Clean up URL
+    if (err) {
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
   // Cooldown timer for resend
   useEffect(() => {
     if (cooldown > 0) {
@@ -144,7 +159,7 @@ export function Login() {
                 disabled={loading || !email.trim()}
                 className="mt-4 w-full py-3 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
               >
-                {loading ? 'Sending...' : 'Send login code'}
+                {loading ? 'Sending...' : 'Send login link'}
               </button>
             </form>
           )}
@@ -153,7 +168,7 @@ export function Login() {
           {step === 'code' && (
             <form onSubmit={handleVerifyOtp}>
               <p className="text-sm text-earth-400 mb-4">
-                We sent a code to <span className="text-earth-200 font-medium">{email}</span>
+                We sent a login link to <span className="text-earth-200 font-medium">{email}</span>. Tap it to log in, or enter the code below.
               </p>
               <label className="block text-sm font-medium text-earth-300 mb-2">
                 Login code
