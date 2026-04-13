@@ -428,6 +428,25 @@ export default {
         return json({ ok: true, id });
       }
 
+      // Resend invite email
+      if (path === '/api/members/resend-invite' && request.method === 'POST') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const { userId } = await request.json() as { userId: string };
+        if (!userId) return json({ error: 'userId required' }, 400);
+
+        const member = await env.DB.prepare('SELECT email, role, status FROM users WHERE id = ?')
+          .bind(userId).first<{ email: string; role: string; status: string }>();
+        if (!member) return json({ error: 'Member not found' }, 404);
+        if (member.status !== 'invited') return json({ error: 'Member has already joined' }, 400);
+
+        const siteUrl = url.origin;
+        const inviterName = user.name || user.email;
+        const farmName = 'Kahiliholo Farm';
+        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.RESEND_API_KEY);
+        if (!sent) return json({ error: 'Failed to send email' }, 500);
+        return json({ ok: true });
+      }
+
       // Update member role
       if (path.startsWith('/api/members/') && request.method === 'PUT') {
         if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);

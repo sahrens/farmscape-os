@@ -59,6 +59,11 @@ export const members = {
     request<{ ok: boolean }>(`/api/members/${id}`, {
       method: 'DELETE',
     }),
+  resendInvite: (userId: string) =>
+    request<{ ok: boolean }>('/api/members/resend-invite', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
 };
 
 // Elements
