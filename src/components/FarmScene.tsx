@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -297,24 +297,68 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
   );
 }
 
-// Camera controller with preset views — reads defaults from config
+// Camera controller with animated fly-to and preset bookmarks
 function CameraController() {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
-  const [tx, ty, tz] = farmConfig.camera.target;
+  const cameraTarget = useStore(s => s.cameraTarget);
+  const clearCameraTarget = useStore(s => s.clearCameraTarget);
 
-  useFrame(() => {
-    if (controlsRef.current) {
-      controlsRef.current.target.set(tx, ty, tz);
-    }
+  // Animation state
+  const animRef = useRef({
+    animating: false,
+    startPos: new THREE.Vector3(),
+    endPos: new THREE.Vector3(),
+    startTarget: new THREE.Vector3(),
+    endTarget: new THREE.Vector3(),
+    progress: 0,
   });
 
+  const [tx, ty, tz] = farmConfig.camera.target;
+
+  // Initialize camera position and target
   useMemo(() => {
     const [px, py, pz] = farmConfig.camera.position;
     camera.position.set(px, py, pz);
     (camera as THREE.PerspectiveCamera).far = farmConfig.camera.far || 2000;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
   }, [camera]);
+
+  // Start animation when cameraTarget changes
+  useEffect(() => {
+    if (!cameraTarget || !controlsRef.current) return;
+    const anim = animRef.current;
+    anim.startPos.copy(camera.position);
+    anim.endPos.set(...cameraTarget.position);
+    anim.startTarget.copy(controlsRef.current.target);
+    anim.endTarget.set(...cameraTarget.target);
+    anim.progress = 0;
+    anim.animating = true;
+  }, [cameraTarget, camera]);
+
+  useFrame((_, delta) => {
+    if (!controlsRef.current) return;
+
+    const anim = animRef.current;
+    if (anim.animating) {
+      // Smooth ease-in-out animation
+      anim.progress = Math.min(1, anim.progress + delta * 1.5);
+      const t = anim.progress < 0.5
+        ? 2 * anim.progress * anim.progress
+        : 1 - Math.pow(-2 * anim.progress + 2, 2) / 2;
+
+      camera.position.lerpVectors(anim.startPos, anim.endPos, t);
+      controlsRef.current.target.lerpVectors(anim.startTarget, anim.endTarget, t);
+
+      if (anim.progress >= 1) {
+        anim.animating = false;
+        clearCameraTarget();
+      }
+    } else if (!cameraTarget) {
+      // Only enforce default target when not animating
+      controlsRef.current.target.set(tx, ty, tz);
+    }
+  });
 
   return <OrbitControls ref={controlsRef} maxPolarAngle={Math.PI / 2.1} minDistance={20} maxDistance={1200} />;
 }

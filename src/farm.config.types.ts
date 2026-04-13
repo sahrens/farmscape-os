@@ -31,6 +31,11 @@ export interface FarmConfig {
     position: [number, number, number];
     target: [number, number, number];
     far?: number;
+    bookmarks?: Array<{
+      name: string;
+      position: [number, number, number];
+      target: [number, number, number];
+    }>;
   };
 
   // Ground plane sizing (centered on the property)

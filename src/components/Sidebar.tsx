@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig from '@/farm.config';
-import { localToGps, formatGps, googleMapsUrl } from '@/lib/geo';
+import { formatGps, googleMapsUrl } from '@/lib/geo';
 
 const ACTIVITY_TYPES = [
   { value: 'watering', label: 'Watering', icon: '💧' },
@@ -41,13 +41,11 @@ function useIsMobile() {
   return isMobile;
 }
 
-/** GPS coordinate display helper — uses shared geo utilities */
+/** GPS coordinate display helper — reads lat/lng directly from element */
 function GpsDisplay({ el }: { el: FarmElement }) {
-  const geo = farmConfig.geoReference;
-  if (!geo) return null;
+  if (el.lat == null || el.lng == null) return null;
 
-  const { lat, lng } = localToGps(el.x, el.y, geo.origin, geo.bearing, farmConfig.unit as 'ft' | 'm');
-  const url = googleMapsUrl(lat, lng);
+  const url = googleMapsUrl(el.lat, el.lng);
 
   return (
     <div>
@@ -58,7 +56,7 @@ function GpsDisplay({ el }: { el: FarmElement }) {
         rel="noopener noreferrer"
         className="block text-forest-400 hover:text-forest-300 text-xs font-mono underline"
       >
-        {formatGps(lat, lng)}
+        {formatGps(el.lat, el.lng)}
       </a>
     </div>
   );
@@ -172,18 +170,38 @@ function ElementDetail({ el }: { el: FarmElement }) {
   const activities = useStore(s => s.activities);
   const activitiesLoading = useStore(s => s.activitiesLoading);
   const selectElement = useStore(s => s.selectElement);
+  const flyTo = useStore(s => s.flyTo);
   const u = farmConfig.unitLabel;
+
+  const handleFlyTo = () => {
+    // Camera looks at the element from a reasonable distance
+    const elHeight = el.elevation || 10;
+    const offset = Math.max(el.width || 30, el.height || 30, 40);
+    flyTo(
+      [el.x + offset * 0.8, elHeight + offset * 0.6, -el.y + offset * 0.8],
+      [el.x, elHeight * 0.3, -el.y]
+    );
+  };
 
   return (
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-earth-50">{el.name}</h2>
-        <button
-          onClick={() => selectElement(null)}
-          className="text-earth-400 hover:text-earth-200 text-2xl leading-none p-1 active:scale-90"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleFlyTo}
+            className="text-earth-400 hover:text-forest-300 text-sm px-2 py-1 rounded bg-earth-700 hover:bg-earth-600 active:scale-95 transition-colors"
+            title="Fly camera to element"
+          >
+            📍 Focus
+          </button>
+          <button
+            onClick={() => selectElement(null)}
+            className="text-earth-400 hover:text-earth-200 text-2xl leading-none p-1 active:scale-90"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="bg-earth-800 rounded-lg p-3">
@@ -386,9 +404,10 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      {/* Transparent click-catcher — no bg color so the 3D canvas stays visible */}
+      {/* Click-catcher only above the sheet — allows touch on the 3D canvas below */}
       <div
-        className="absolute inset-0 z-40"
+        className="absolute inset-x-0 top-0 z-40"
+        style={{ bottom: '45vh' }}
         onClick={onClose}
       />
       <div
