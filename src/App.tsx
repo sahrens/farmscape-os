@@ -21,6 +21,8 @@ function Dashboard({ visible }: { visible: boolean }) {
   const fetchElements = useStore(s => s.fetchElements);
   const elementsLoading = useStore(s => s.elementsLoading);
   const elements = useStore(s => s.elements);
+  const sidebarOpen = useStore(s => s.sidebarOpen);
+  const setSidebarOpen = useStore(s => s.setSidebarOpen);
 
   useEffect(() => {
     fetchElements();
@@ -40,6 +42,18 @@ function Dashboard({ visible }: { visible: boolean }) {
           <FarmScene />
         )}
       </div>
+      {/* Floating sidebar toggle */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className={`absolute top-3 left-3 z-20 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-medium transition-colors active:scale-95 shadow-lg ${
+          sidebarOpen
+            ? 'bg-forest-600 text-white'
+            : 'bg-earth-800/90 backdrop-blur text-earth-300 border border-earth-700 hover:bg-earth-700'
+        }`}
+        title={sidebarOpen ? 'Hide elements panel' : 'Show elements panel'}
+      >
+        ☰
+      </button>
       {/* Element count badge */}
       <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700 z-10">
         {elements.length} elements
