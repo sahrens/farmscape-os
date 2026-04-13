@@ -7,6 +7,7 @@
 export interface Env {
   DB: D1Database;
   RESEND_API_KEY: string;
+  ASSETS: { fetch: (request: Request) => Promise<Response> };
 }
 
 // --- Types ---
@@ -855,7 +856,7 @@ export default {
       }
     }
 
-    // Fallback
-    return json({ error: 'Not found' }, 404);
+    // Fallback — pass non-API routes to static assets (SPA)
+    return env.ASSETS.fetch(request);
   },
 };
