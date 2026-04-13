@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Route, Switch } from 'wouter';
+import { Route, Switch, useLocation } from 'wouter';
 import { useStore } from '@/lib/store';
 import * as api from '@/lib/api';
 import farmConfig from '@/farm.config';
@@ -14,10 +14,10 @@ const Fieldwork = lazy(() => import('@/pages/Fieldwork'));
 const Members = lazy(() => import('@/pages/Members'));
 
 /**
- * Dashboard — 3D map view. NavBar is rendered by the app shell above,
- * so this only contains the 3D scene + sidebar.
+ * Dashboard — 3D map view. Always mounted to avoid Canvas remount/black screen.
+ * Hidden via CSS when on other routes.
  */
-function Dashboard() {
+function Dashboard({ visible }: { visible: boolean }) {
   const fetchElements = useStore(s => s.fetchElements);
   const elementsLoading = useStore(s => s.elementsLoading);
   const elements = useStore(s => s.elements);
@@ -27,16 +27,21 @@ function Dashboard() {
   }, [fetchElements]);
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-hidden">
-      {elementsLoading && elements.length === 0 ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-earth-400 text-lg">Loading elements...</div>
-        </div>
-      ) : (
-        <FarmScene />
-      )}
+    <div
+      className="relative flex-1 min-h-0 overflow-hidden"
+      style={{ display: visible ? 'flex' : 'none', flexDirection: 'column' }}
+    >
+      <div className="relative flex-1 min-h-0">
+        {elementsLoading && elements.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-earth-400 text-lg">Loading elements...</div>
+          </div>
+        ) : (
+          <FarmScene />
+        )}
+      </div>
       {/* Element count badge */}
-      <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700">
+      <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700 z-10">
         {elements.length} elements
       </div>
       {/* Sidebar — handles its own mobile/desktop layout */}
@@ -134,27 +139,34 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 /**
  * App shell — NavBar is always visible, routes fill the remaining space.
- * The outer div is a flex column filling the viewport (100dvh via CSS).
- * Dashboard uses flex-1 to fill remaining space; Data/Vision scroll internally.
+ * Dashboard (3D Canvas) is always mounted but hidden when on other routes
+ * to prevent the black screen on route switch.
  */
 export default function App() {
+  const [location] = useLocation();
+  const isMapRoute = location === '/';
+
   return (
     <AuthGuard>
       <div className="h-full flex flex-col bg-earth-900">
         <NavBar />
-        <Suspense fallback={
-          <div className="flex-1 flex items-center justify-center bg-earth-900">
-            <div className="text-earth-400">Loading...</div>
-          </div>
-        }>
-          <Switch>
-            <Route path="/data" component={DataExplorer} />
-            <Route path="/vision" component={Vision} />
-            <Route path="/fieldwork" component={Fieldwork} />
-            <Route path="/members" component={Members} />
-            <Route path="/" component={Dashboard} />
-          </Switch>
-        </Suspense>
+        {/* Dashboard always mounted, hidden when not on map route */}
+        <Dashboard visible={isMapRoute} />
+        {/* Other routes render on top when active */}
+        {!isMapRoute && (
+          <Suspense fallback={
+            <div className="flex-1 flex items-center justify-center bg-earth-900">
+              <div className="text-earth-400">Loading...</div>
+            </div>
+          }>
+            <Switch>
+              <Route path="/data" component={DataExplorer} />
+              <Route path="/vision" component={Vision} />
+              <Route path="/fieldwork" component={Fieldwork} />
+              <Route path="/members" component={Members} />
+            </Switch>
+          </Suspense>
+        )}
       </div>
     </AuthGuard>
   );

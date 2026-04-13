@@ -104,14 +104,18 @@ function MemberCard({
   currentUserId,
   onRoleChange,
   onRemove,
+  onResendInvite,
 }: {
   member: User;
   currentUserId: string;
   onRoleChange: (id: string, role: UserRole) => void;
   onRemove: (id: string) => void;
+  onResendInvite: (id: string) => void;
 }) {
   const isSelf = member.id === currentUserId;
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   return (
     <div className="bg-earth-800 rounded-xl border border-earth-700 p-4 space-y-3">
@@ -144,6 +148,23 @@ function MemberCard({
           <span className="text-xs px-2 py-0.5 rounded-full bg-vanilla-900/40 text-vanilla-300">
             Invited
           </span>
+        )}
+        {member.status === 'invited' && !isSelf && (
+          <button
+            onClick={async () => {
+              setResending(true);
+              try {
+                await onResendInvite(member.id);
+                setResent(true);
+                setTimeout(() => setResent(false), 3000);
+              } catch { /* handled by parent */ }
+              setResending(false);
+            }}
+            disabled={resending || resent}
+            className="text-xs px-2 py-0.5 rounded-full bg-forest-900/40 text-forest-300 hover:bg-forest-800/60 transition-colors disabled:opacity-50"
+          >
+            {resent ? 'Sent!' : resending ? 'Sending...' : 'Resend invite'}
+          </button>
         )}
         <span className="text-xs text-earth-500 ml-auto">
           {member.last_login ? `Active ${timeAgo(member.last_login)}` : 'Never logged in'}
@@ -230,6 +251,14 @@ function Members() {
     }
   };
 
+  const handleResendInvite = async (id: string) => {
+    try {
+      await api.members.resendInvite(id);
+    } catch (err) {
+      console.error('Failed to resend invite:', err);
+    }
+  };
+
   if (!user || user.role !== 'admin') {
     return (
       <div className="flex-1 min-h-0 overflow-y-auto bg-earth-900 text-earth-100">
@@ -263,6 +292,7 @@ function Members() {
                 currentUserId={user.id}
                 onRoleChange={handleRoleChange}
                 onRemove={handleRemove}
+                onResendInvite={handleResendInvite}
               />
             ))}
           </div>

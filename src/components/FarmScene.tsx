@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -463,12 +463,23 @@ function Scene() {
 
 export function FarmScene() {
   const cam = farmConfig.camera;
+  const [ready, setReady] = useState(false);
+
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center bg-earth-900 z-10">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-earth-600 border-t-forest-400 rounded-full animate-spin" />
+            <span className="text-earth-400 text-sm">Loading 3D view...</span>
+          </div>
+        </div>
+      )}
       <Canvas
         shadows
         camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position as [number, number, number] }}
         gl={{ antialias: true }}
+        onCreated={() => setReady(true)}
       >
         <Scene />
       </Canvas>
