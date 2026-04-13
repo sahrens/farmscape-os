@@ -23,17 +23,29 @@ function Dashboard({ visible }: { visible: boolean }) {
   const elements = useStore(s => s.elements);
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
+  const sheetHeight = useStore(s => s.sheetHeight);
+  const selectElement = useStore(s => s.selectElement);
 
   useEffect(() => {
     fetchElements();
   }, [fetchElements]);
+
+  // Restore selected element from URL hash on initial load
+  useEffect(() => {
+    if (elements.length === 0) return;
+    const hash = window.location.hash.slice(1); // remove #
+    if (hash && elements.some(e => e.id === hash)) {
+      selectElement(hash);
+    }
+  }, [elements]); // only on first element load
 
   return (
     <div
       className="relative flex-1 min-h-0 overflow-hidden"
       style={{ display: visible ? 'flex' : 'none', flexDirection: 'column' }}
     >
-      <div className="relative flex-1 min-h-0">
+      {/* Canvas area shrinks by sheetHeight so Three.js centers in visible space */}
+      <div className="relative flex-1 min-h-0" style={{ marginBottom: sheetHeight > 0 ? sheetHeight : 0 }}>
         {elementsLoading && elements.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-earth-400 text-lg">Loading elements...</div>

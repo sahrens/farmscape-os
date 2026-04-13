@@ -33,6 +33,8 @@ interface FarmStore {
   // Sidebar
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  sheetHeight: number; // current mobile sheet height in px (0 when closed)
+  setSheetHeight: (h: number) => void;
 
   // Camera
   cameraTarget: { position: [number, number, number]; target: [number, number, number] } | null;
@@ -95,8 +97,12 @@ export const useStore = create<FarmStore>((set, get) => ({
   selectedId: null,
   selectElement: (id) => {
     set({ selectedId: id, sidebarOpen: !!id });
+    // Sync to URL hash for sharing / reload
     if (id) {
+      window.history.replaceState(null, '', `#${id}`);
       get().fetchActivities(id);
+    } else {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   },
 
@@ -140,6 +146,8 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Sidebar
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  sheetHeight: 0,
+  setSheetHeight: (h) => set({ sheetHeight: h }),
 
   // Camera
   cameraTarget: null,

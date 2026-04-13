@@ -176,18 +176,14 @@ function ElementDetail({ el }: { el: FarmElement }) {
 
   const handleFlyTo = () => {
     // Camera looks at the element from a comfortable distance.
-    // On mobile the bottom sheet covers ~45% of the viewport, so we
-    // offset the target upward (negative Z in scene coords) and pull
-    // the camera further back so the element sits in the visible area.
+    // No target offset needed — the Canvas viewport is resized to the
+    // visible area above the mobile sheet, so orbit centers naturally.
     const elHeight = el.elevation || 10;
     const span = Math.max(el.width || 30, el.height || 30, 60);
-    const dist = span * 2.2; // pull back further
-    const isMobile = window.innerWidth < 768;
-    // Shift target "up" on screen by moving it in the -Z direction
-    const sheetOffset = isMobile ? span * 0.6 : 0;
+    const dist = span * 2.2;
     flyTo(
       [el.x + dist * 0.7, elHeight + dist * 0.5, -el.y + dist * 0.7],
-      [el.x, elHeight * 0.3, -el.y - sheetOffset]
+      [el.x, elHeight * 0.3, -el.y]
     );
   };
 
@@ -386,6 +382,19 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ startY: 0, currentY: 0, dragging: false });
   const [translateY, setTranslateY] = useState(0);
+  const setSheetHeight = useStore(s => s.setSheetHeight);
+
+  // Report sheet height to store so Canvas can resize
+  useEffect(() => {
+    const measure = () => {
+      if (sheetRef.current) {
+        const visible = sheetRef.current.offsetHeight - translateY;
+        setSheetHeight(Math.max(0, visible));
+      }
+    };
+    measure();
+    return () => setSheetHeight(0);
+  }, [translateY, setSheetHeight]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     dragRef.current.startY = e.touches[0].clientY;
@@ -404,6 +413,7 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
   const handleTouchEnd = useCallback(() => {
     dragRef.current.dragging = false;
     if (translateY > 80) {
+      setSheetHeight(0);
       onClose();
     } else {
       setTranslateY(0);
