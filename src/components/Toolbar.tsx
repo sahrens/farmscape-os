@@ -39,21 +39,8 @@ export function NavBar() {
   return (
     <div className="bg-earth-800 border-b border-earth-700/50 shrink-0 z-50 relative">
       <div className="flex items-center justify-between px-3 py-2 gap-2">
-        {/* Left: sidebar toggle (map only) + farm name */}
+        {/* Left: farm name */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">
-          {isMap && (
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors active:scale-95 ${
-                sidebarOpen
-                  ? 'bg-forest-600 text-white'
-                  : 'bg-earth-700 text-earth-300 hover:bg-earth-600'
-              }`}
-              title={sidebarOpen ? 'Hide elements panel' : 'Show elements panel'}
-            >
-              ☰
-            </button>
-          )}
           <h1
             className="text-sm font-bold text-forest-300 truncate cursor-pointer"
             onClick={() => setLocation('/')}
