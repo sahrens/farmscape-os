@@ -44,7 +44,13 @@ function Dashboard({ visible }: { visible: boolean }) {
       className="relative flex-1 min-h-0 overflow-hidden"
       style={{ display: visible ? 'flex' : 'none', flexDirection: 'column' }}
     >
-      <div className="relative flex-1 min-h-0">
+      <div
+        className="relative flex-1 min-h-0"
+        style={{
+          transform: sheetHeight > 0 ? `translateY(${-sheetHeight / 2}px)` : 'none',
+          transition: 'transform 0.15s ease-out',
+        }}
+      >
         {elementsLoading && elements.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-earth-400 text-lg">Loading elements...</div>
