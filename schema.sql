@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS elements (
   planted_at TEXT,             -- ISO date
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  synced_at TEXT               -- last sync timestamp
+  synced_at TEXT,               -- last sync timestamp
+  created_by TEXT               -- user_id of creator
 );
 
 -- Activities: watering, pruning, harvesting, etc.
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS activities (
   user_name TEXT,
   duration_minutes INTEGER,
   is_test INTEGER DEFAULT 0,   -- 1 = test entry, 0 = real
+  created_by TEXT,              -- user_id of creator
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT,
   synced_at TEXT,
@@ -102,7 +104,42 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   synced_at TEXT
 );
 
+-- Users: individual accounts with role-based permissions
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT,                    -- display name, set on first login
+  role TEXT NOT NULL DEFAULT 'member',  -- 'admin', 'member', 'read'
+  status TEXT NOT NULL DEFAULT 'invited', -- 'invited', 'active'
+  created_by TEXT,              -- user_id of admin who invited
+  created_at TEXT DEFAULT (datetime('now')),
+  last_login TEXT
+);
+
+-- Sessions: auth tokens tied to users
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- OTP codes: short-lived email verification codes
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  code TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_codes(email);
 CREATE INDEX IF NOT EXISTS idx_elements_type ON elements(type);
 CREATE INDEX IF NOT EXISTS idx_elements_status ON elements(status);
 CREATE INDEX IF NOT EXISTS idx_activities_element ON activities(element_id);

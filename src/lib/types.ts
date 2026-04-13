@@ -1,3 +1,17 @@
+export type UserRole = 'admin' | 'member' | 'read';
+export type UserStatus = 'invited' | 'active';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  status: UserStatus;
+  created_by: string | null;
+  created_at: string;
+  last_login: string | null;
+}
+
 export interface FarmElement {
   id: string;
   type: 'structure' | 'tree' | 'zone' | 'infrastructure';
@@ -17,6 +31,7 @@ export interface FarmElement {
   planted_at: string | null;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
   synced_at: string | null;
 }
 
@@ -34,6 +49,7 @@ export interface Activity {
   duration_minutes: number | null;
   is_test?: number;
   created_at: string;
+  created_by: string | null;
   synced_at: string | null;
 }
 
@@ -51,6 +67,7 @@ export interface Observation {
   user_name: string | null;
   is_test?: number;
   created_at: string;
+  created_by: string | null;
   synced_at: string | null;
 }
 
@@ -65,5 +82,6 @@ export interface GpsTrack {
   heading: number | null;
   user_name: string | null;
   created_at: string;
+  created_by: string | null;
   synced_at: string | null;
 }

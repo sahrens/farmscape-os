@@ -1,4 +1,4 @@
-import type { FarmElement, Activity, Observation } from './types';
+import type { FarmElement, Activity, Observation, User } from './types';
 
 const BASE = '';
 
@@ -20,13 +20,45 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // Auth
 export const auth = {
-  login: (password: string) =>
-    request<{ ok: boolean }>('/api/auth/login', {
+  requestOtp: (email: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/request-otp', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email }),
+    }),
+  verifyOtp: (email: string, code: string) =>
+    request<{ ok: boolean; user: User; needsName: boolean }>('/api/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
     }),
   check: () =>
-    request<{ authenticated: boolean }>('/api/auth/check'),
+    request<{ authenticated: boolean; user?: User }>('/api/auth/check'),
+  logout: () =>
+    request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+  setName: (name: string) =>
+    request<{ ok: boolean; name: string }>('/api/auth/set-name', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+};
+
+// Members (admin)
+export const members = {
+  list: () =>
+    request<User[]>('/api/members'),
+  invite: (email: string, role: string) =>
+    request<{ ok: boolean; id: string }>('/api/members/invite', {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    }),
+  updateRole: (id: string, role: string) =>
+    request<{ ok: boolean }>(`/api/members/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/members/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 // Elements

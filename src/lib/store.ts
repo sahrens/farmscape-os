@@ -1,13 +1,15 @@
 import { create } from 'zustand';
-import type { FarmElement, Activity } from './types';
+import type { FarmElement, Activity, User } from './types';
 import * as api from './api';
 
 interface FarmStore {
   // Auth
   authenticated: boolean;
   authChecked: boolean;
-  login: (password: string) => Promise<boolean>;
+  user: User | null;
   checkAuth: () => Promise<void>;
+  setUser: (user: User | null) => void;
+  logout: () => Promise<void>;
 
   // Elements
   elements: FarmElement[];
@@ -48,22 +50,27 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Auth
   authenticated: false,
   authChecked: false,
-  login: async (password: string) => {
-    try {
-      await api.auth.login(password);
-      set({ authenticated: true });
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  user: null,
   checkAuth: async () => {
     try {
-      const { authenticated } = await api.auth.check();
-      set({ authenticated, authChecked: true });
+      const result = await api.auth.check();
+      set({
+        authenticated: result.authenticated,
+        user: result.user || null,
+        authChecked: true,
+      });
     } catch {
-      set({ authenticated: false, authChecked: true });
+      set({ authenticated: false, user: null, authChecked: true });
     }
+  },
+  setUser: (user) => set({ user, authenticated: !!user }),
+  logout: async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
+    }
+    set({ authenticated: false, user: null });
   },
 
   // Elements
@@ -73,7 +80,6 @@ export const useStore = create<FarmStore>((set, get) => ({
     set({ elementsLoading: true });
     try {
       const els = await api.elements.list();
-      // Parse metadata strings
       const parsed = els.map(el => ({
         ...el,
         metadata: typeof el.metadata === 'string' ? JSON.parse(el.metadata) : el.metadata,
@@ -119,7 +125,6 @@ export const useStore = create<FarmStore>((set, get) => ({
         is_test: 1,
         created_at: new Date().toISOString(),
       });
-      // Refresh activities list
       await get().fetchActivities(elementId);
       return true;
     } catch (err) {
