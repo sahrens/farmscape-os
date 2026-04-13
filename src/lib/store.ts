@@ -94,7 +94,7 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Selection
   selectedId: null,
   selectElement: (id) => {
-    set({ selectedId: id });
+    set({ selectedId: id, sidebarOpen: !!id });
     if (id) {
       get().fetchActivities(id);
     }
