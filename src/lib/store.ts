@@ -32,6 +32,11 @@ interface FarmStore {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 
+  // Camera
+  cameraTarget: { position: [number, number, number]; target: [number, number, number] } | null;
+  flyTo: (position: [number, number, number], target: [number, number, number]) => void;
+  clearCameraTarget: () => void;
+
   // Filter
   typeFilter: string | null;
   statusFilter: string | null;
@@ -111,6 +116,7 @@ export const useStore = create<FarmStore>((set, get) => ({
         element_id: elementId,
         type,
         notes: notes || undefined,
+        is_test: 1,
         created_at: new Date().toISOString(),
       });
       // Refresh activities list
@@ -129,6 +135,11 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Sidebar
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  // Camera
+  cameraTarget: null,
+  flyTo: (position, target) => set({ cameraTarget: { position, target } }),
+  clearCameraTarget: () => set({ cameraTarget: null }),
 
   // Filter
   typeFilter: null,

@@ -10,6 +10,22 @@ const FILTERABLE_COLUMNS: Record<string, string[]> = {
   changelog: ['table_name', 'action', 'author'],
 };
 
+const STORAGE_KEY_PREFIX = 'farmscape-cols-';
+
+function loadSavedCols(table: string): Set<string> | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + table);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return null;
+}
+
+function saveCols(table: string, cols: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFIX + table, JSON.stringify([...cols]));
+  } catch {}
+}
+
 function DataExplorer() {
   const [activeTable, setActiveTable] = useState('elements');
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
@@ -49,8 +65,13 @@ function DataExplorer() {
 
     data.schema(activeTable).then(cols => {
       setColumns(cols);
-      const defaultVisible = new Set(cols.map(c => c.name));
-      setVisibleCols(defaultVisible);
+      // Check for saved column visibility
+      const saved = loadSavedCols(activeTable);
+      if (saved && saved.size > 0) {
+        setVisibleCols(saved);
+      } else {
+        setVisibleCols(new Set(cols.map(c => c.name)));
+      }
     }).catch(console.error);
 
     const filterCols = FILTERABLE_COLUMNS[activeTable] || [];
@@ -112,8 +133,14 @@ function DataExplorer() {
       const next = new Set(prev);
       if (next.has(col)) next.delete(col);
       else next.add(col);
+      saveCols(activeTable, next);
       return next;
     });
+  };
+
+  const setAllCols = (cols: Set<string>) => {
+    setVisibleCols(cols);
+    saveCols(activeTable, cols);
   };
 
   const handleSort = (col: string) => {
@@ -146,6 +173,15 @@ function DataExplorer() {
 
   const truncate = (s: string, max: number) =>
     s.length > max ? s.slice(0, max) + '...' : s;
+
+  // GPS columns are real DB columns now — format them nicely
+  const isGpsCol = (name: string) =>
+    name === 'lat' || name === 'lng' || name === 'gps_lat' || name === 'gps_lng';
+
+  const formatGpsCell = (value: unknown): string => {
+    if (value === null || value === undefined) return '—';
+    return Number(value).toFixed(6);
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-earth-900 text-earth-100">
@@ -251,16 +287,25 @@ function DataExplorer() {
               <div className="absolute top-full left-0 mt-1 bg-earth-800 border border-earth-600 rounded-lg shadow-xl z-40 p-2 max-h-64 overflow-y-auto min-w-48">
                 <div className="flex gap-2 mb-2 pb-2 border-b border-earth-700">
                   <button
-                    onClick={() => setVisibleCols(new Set(columns.map(c => c.name)))}
+                    onClick={() => setAllCols(new Set(columns.map(c => c.name)))}
                     className="text-xs text-forest-400 hover:text-forest-300"
                   >
                     All
                   </button>
                   <button
-                    onClick={() => setVisibleCols(new Set(['id', 'name', 'type', 'status', 'created_at']))}
+                    onClick={() => setAllCols(new Set(['id', 'name', 'type', 'status', 'lat', 'lng', 'created_at']))}
                     className="text-xs text-forest-400 hover:text-forest-300"
                   >
                     Minimal
+                  </button>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(STORAGE_KEY_PREFIX + activeTable);
+                      setVisibleCols(new Set(columns.map(c => c.name)));
+                    }}
+                    className="text-xs text-earth-500 hover:text-earth-300"
+                  >
+                    Reset
                   </button>
                 </div>
                 {columns.map(col => (
@@ -272,7 +317,7 @@ function DataExplorer() {
                       className="rounded border-earth-500"
                     />
                     <span className="text-xs text-earth-200">{col.name}</span>
-                    <span className="text-xs text-earth-500 ml-auto">{col.type || 'TEXT'}</span>
+                    <span className="text-xs text-earth-500 ml-auto">{col.type || ''}</span>
                   </label>
                 ))}
               </div>
@@ -340,6 +385,16 @@ function DataExplorer() {
                 <td className="px-3 py-2 text-earth-600 text-xs">{page * pageSize + i + 1}</td>
                 {displayCols.map(col => {
                   const val = row[col.name];
+
+                  // GPS columns: show with precision and green tint
+                  if (isGpsCol(col.name)) {
+                    return (
+                      <td key={col.name} className="px-3 py-2 text-forest-300 text-xs whitespace-nowrap font-mono">
+                        {formatGpsCell(val)}
+                      </td>
+                    );
+                  }
+
                   const display = formatCell(val);
                   const isLong = display.length > 50;
                   return (

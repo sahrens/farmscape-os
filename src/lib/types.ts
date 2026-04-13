@@ -3,6 +3,8 @@ export interface FarmElement {
   type: 'structure' | 'tree' | 'zone' | 'infrastructure';
   subtype: string | null;
   name: string;
+  lat: number | null;
+  lng: number | null;
   x: number;
   y: number;
   z: number;

@@ -4,8 +4,7 @@ import farmConfig from '@/farm.config';
 
 /**
  * NavBar — shared top navigation rendered once in App.tsx above all routes.
- * Shows farm name, route links (Map / Vision / Data), and on the map view
- * also shows the sidebar toggle and status filters.
+ * Shows farm name, route links, status filters (map view), and camera bookmarks (map view).
  */
 export function NavBar() {
   const [location, setLocation] = useLocation();
@@ -13,14 +12,17 @@ export function NavBar() {
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
   const statusFilter = useStore(s => s.statusFilter);
   const setStatusFilter = useStore(s => s.setStatusFilter);
+  const flyTo = useStore(s => s.flyTo);
   const elements = useStore(s => s.elements);
 
   const isMap = location === '/';
   const isVision = location === '/vision';
   const isData = location === '/data';
+  const isFieldwork = location === '/fieldwork';
 
   const activeCount = elements.filter(e => e.status === 'active').length;
   const plannedCount = elements.filter(e => e.status === 'planned').length;
+  const bookmarks = farmConfig.camera.bookmarks || [];
 
   const linkClass = (active: boolean) =>
     `px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors active:scale-95 ${
@@ -67,6 +69,9 @@ export function NavBar() {
           <button onClick={() => setLocation('/data')} className={linkClass(isData)}>
             Data
           </button>
+          <button onClick={() => setLocation('/fieldwork')} className={linkClass(isFieldwork)}>
+            Fieldwork
+          </button>
 
           {/* Status filters — only on map view */}
           {isMap && (
@@ -102,6 +107,22 @@ export function NavBar() {
           )}
         </div>
       </div>
+
+      {/* Camera bookmarks — only on map view, below the main nav */}
+      {isMap && bookmarks.length > 0 && (
+        <div className="flex items-center gap-1.5 px-3 pb-2 -mt-0.5">
+          <span className="text-[10px] text-earth-500 uppercase tracking-wider mr-1">View:</span>
+          {bookmarks.map((bm) => (
+            <button
+              key={bm.name}
+              onClick={() => flyTo(bm.position as [number, number, number], bm.target as [number, number, number])}
+              className="px-2 py-1 rounded text-[10px] font-medium bg-earth-700/60 text-earth-400 hover:bg-earth-600 hover:text-earth-200 transition-colors active:scale-95"
+            >
+              {bm.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { NavBar } from '@/components/Toolbar';
 
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const Vision = lazy(() => import('@/pages/Vision'));
+const Fieldwork = lazy(() => import('@/pages/Fieldwork'));
 
 /**
  * Dashboard — 3D map view. NavBar is rendered by the app shell above,
@@ -83,6 +84,7 @@ export default function App() {
           <Switch>
             <Route path="/data" component={DataExplorer} />
             <Route path="/vision" component={Vision} />
+            <Route path="/fieldwork" component={Fieldwork} />
             <Route path="/" component={Dashboard} />
           </Switch>
         </Suspense>

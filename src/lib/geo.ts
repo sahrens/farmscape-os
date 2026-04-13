@@ -45,6 +45,40 @@ export function localToGps(
 }
 
 /**
+ * Convert GPS lat/lng back to local farm coordinates.
+ * Inverse of localToGps().
+ */
+export function gpsToLocal(
+  lat: number,
+  lng: number,
+  origin: { lat: number; lng: number },
+  bearing: number,
+  unit: 'ft' | 'm' = 'ft',
+): { x: number; y: number } {
+  // Convert degree deltas to meters
+  const dLat = lat - origin.lat;
+  const dLng = lng - origin.lng;
+  const dN = dLat * 111320;
+  const dE = dLng * 111320 * Math.cos((origin.lat * Math.PI) / 180);
+
+  // Inverse rotation: from true north/east back to local coords
+  const rad = (bearing * Math.PI) / 180;
+  const cosB = Math.cos(rad);
+  const sinB = Math.sin(rad);
+
+  // Solve: dN = ym*cosB - xm*sinB, dE = ym*sinB + xm*cosB
+  const xm = dE * cosB - dN * sinB;
+  const ym = dN * cosB + dE * sinB;
+
+  // Convert meters to local units
+  const scale = unit === 'ft' ? 0.3048 : 1;
+  return {
+    x: xm / scale,
+    y: ym / scale,
+  };
+}
+
+/**
  * Format GPS coordinates as a human-readable string.
  */
 export function formatGps(lat: number, lng: number, precision = 6): string {

@@ -271,10 +271,11 @@ export default {
     if (path === '/api/elements' && request.method === 'POST') {
       const el = await request.json() as Record<string, unknown>;
       await env.DB.prepare(
-        `INSERT INTO elements (id, type, subtype, name, x, y, z, width, height, elevation, rotation, metadata, status, planted_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO elements (id, type, subtype, name, lat, lng, x, y, z, width, height, elevation, rotation, metadata, status, planted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            type=excluded.type, subtype=excluded.subtype, name=excluded.name,
+           lat=excluded.lat, lng=excluded.lng,
            x=excluded.x, y=excluded.y, z=excluded.z,
            width=excluded.width, height=excluded.height, elevation=excluded.elevation,
            rotation=excluded.rotation, metadata=excluded.metadata,
@@ -282,6 +283,7 @@ export default {
            updated_at=excluded.updated_at, synced_at=datetime('now')`
       ).bind(
         el.id, el.type, el.subtype || null, el.name,
+        el.lat ?? null, el.lng ?? null,
         el.x, el.y, el.z || 0,
         el.width || null, el.height || null, el.elevation || null,
         el.rotation || 0, el.metadata ? JSON.stringify(el.metadata) : null,
@@ -425,10 +427,11 @@ export default {
             } else {
               const el = change.data;
               await env.DB.prepare(
-                `INSERT INTO elements (id, type, subtype, name, x, y, z, width, height, elevation, rotation, metadata, status, planted_at, created_at, updated_at, synced_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                `INSERT INTO elements (id, type, subtype, name, lat, lng, x, y, z, width, height, elevation, rotation, metadata, status, planted_at, created_at, updated_at, synced_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                  ON CONFLICT(id) DO UPDATE SET
                    type=excluded.type, subtype=excluded.subtype, name=excluded.name,
+                   lat=excluded.lat, lng=excluded.lng,
                    x=excluded.x, y=excluded.y, z=excluded.z,
                    width=excluded.width, height=excluded.height, elevation=excluded.elevation,
                    rotation=excluded.rotation, metadata=excluded.metadata,
@@ -436,6 +439,7 @@ export default {
                    updated_at=excluded.updated_at, synced_at=datetime('now')`
               ).bind(
                 el.id, el.type, el.subtype || null, el.name,
+                el.lat ?? null, el.lng ?? null,
                 el.x, el.y, el.z || 0,
                 el.width || null, el.height || null, el.elevation || null,
                 el.rotation || 0, el.metadata ? JSON.stringify(el.metadata) : null,

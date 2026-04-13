@@ -7,8 +7,10 @@ CREATE TABLE IF NOT EXISTS elements (
   type TEXT NOT NULL,          -- 'structure', 'tree', 'mandala', 'bed', 'zone', 'infrastructure'
   subtype TEXT,                -- species or sub-category
   name TEXT NOT NULL,
-  x REAL NOT NULL,             -- local coordinate (east)
-  y REAL NOT NULL,             -- local coordinate (north)
+  lat REAL,                    -- GPS latitude (source of truth)
+  lng REAL,                    -- GPS longitude (source of truth)
+  x REAL NOT NULL,             -- local coordinate (east), derived from lat/lng + geoReference
+  y REAL NOT NULL,             -- local coordinate (north), derived from lat/lng + geoReference
   z REAL DEFAULT 0,            -- elevation offset
   width REAL,                  -- footprint width
   height REAL,                 -- footprint depth
