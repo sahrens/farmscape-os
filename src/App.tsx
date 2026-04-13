@@ -1,6 +1,8 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Route, Switch } from 'wouter';
 import { useStore } from '@/lib/store';
+import * as api from '@/lib/api';
+import farmConfig from '@/farm.config';
 import { Login } from '@/pages/Login';
 import { FarmScene } from '@/components/FarmScene';
 import { Sidebar } from '@/components/Sidebar';
@@ -43,10 +45,67 @@ function Dashboard() {
   );
 }
 
+function NameSetup() {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const setUser = useStore(s => s.setUser);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || loading) return;
+    setLoading(true);
+    try {
+      await api.auth.setName(name.trim());
+      const check = await api.auth.check();
+      if (check.user) setUser(check.user);
+      // Clean up URL
+      window.history.replaceState({}, '', '/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set name');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-earth-900 px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-forest-300 mb-2">{farmConfig.name}</h1>
+        </div>
+        <div className="bg-earth-800 rounded-xl p-6 shadow-lg border border-earth-700">
+          <form onSubmit={handleSubmit}>
+            <p className="text-sm text-earth-400 mb-4">Welcome! What should we call you?</p>
+            <label className="block text-sm font-medium text-earth-300 mb-2">Your name</label>
+            <input
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full px-4 py-3 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent"
+              placeholder="e.g. Spencer"
+              autoFocus
+            />
+            {error && <p className="mt-2 text-sm text-sunset-400">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className="mt-4 w-full py-3 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+            >
+              {loading ? 'Saving...' : 'Continue'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const authenticated = useStore(s => s.authenticated);
   const authChecked = useStore(s => s.authChecked);
   const checkAuth = useStore(s => s.checkAuth);
+  const user = useStore(s => s.user);
 
   useEffect(() => {
     checkAuth();
@@ -62,6 +121,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!authenticated) {
     return <Login />;
+  }
+
+  // After magic link login, user may need to set their name
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('setup') === 'name' || (authenticated && user && !user.name)) {
+    return <NameSetup />;
   }
 
   return <>{children}</>;

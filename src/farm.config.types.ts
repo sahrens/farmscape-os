@@ -54,6 +54,7 @@ export interface FarmConfig {
   geoReference?: {
     origin: { lat: number; lng: number }; // GPS of local coordinate origin (0,0)
     bearing: number; // Degrees CW from true north to local y-axis
+    metersPerUnit: number; // Calibrated scale: meters per local coordinate unit
   };
 
   // Donation configuration
