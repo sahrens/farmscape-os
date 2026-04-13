@@ -316,7 +316,10 @@ function CameraController() {
 
   const [tx, ty, tz] = farmConfig.camera.target;
 
-  // Initialize camera position and target
+  // Track whether controls have been initialized
+  const initRef = useRef(false);
+
+  // Initialize camera position
   useMemo(() => {
     const [px, py, pz] = farmConfig.camera.position;
     camera.position.set(px, py, pz);
@@ -352,11 +355,17 @@ function CameraController() {
 
       if (anim.progress >= 1) {
         anim.animating = false;
+        // Snap to exact final values
+        camera.position.copy(anim.endPos);
+        controlsRef.current.target.copy(anim.endTarget);
         clearCameraTarget();
       }
-    } else if (!cameraTarget) {
-      // Only enforce default target when not animating
+    }
+
+    // Set initial target once after controls mount
+    if (!initRef.current) {
       controlsRef.current.target.set(tx, ty, tz);
+      initRef.current = true;
     }
   });
 
