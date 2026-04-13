@@ -299,10 +299,11 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 
 // Camera controller with animated fly-to and preset bookmarks
 function CameraController() {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const controlsRef = useRef<any>(null);
   const cameraTarget = useStore(s => s.cameraTarget);
   const clearCameraTarget = useStore(s => s.clearCameraTarget);
+  const sheetHeight = useStore(s => s.sheetHeight);
 
   // Animation state
   const animRef = useRef({
@@ -313,6 +314,9 @@ function CameraController() {
     endTarget: new THREE.Vector3(),
     progress: 0,
   });
+
+  // Animated view offset — smoothly shifts visual center
+  const currentOffsetY = useRef(0);
 
   const [tx, ty, tz] = farmConfig.camera.target;
 
@@ -355,7 +359,6 @@ function CameraController() {
 
       if (anim.progress >= 1) {
         anim.animating = false;
-        // Snap to exact final values
         camera.position.copy(anim.endPos);
         controlsRef.current.target.copy(anim.endTarget);
         clearCameraTarget();
@@ -367,6 +370,22 @@ function CameraController() {
       controlsRef.current.target.set(tx, ty, tz);
       initRef.current = true;
     }
+
+    // Animated view offset: shift visual center above mobile sheet
+    // Target offset = half the sheet height (shift scene "up" by that much)
+    const targetOffsetY = sheetHeight / 2;
+    const lerp = 0.08; // smooth animation speed
+    currentOffsetY.current += (targetOffsetY - currentOffsetY.current) * lerp;
+
+    const cam = camera as THREE.PerspectiveCamera;
+    const w = gl.domElement.clientWidth;
+    const h = gl.domElement.clientHeight;
+    if (Math.abs(currentOffsetY.current) > 0.5) {
+      cam.setViewOffset(w, h, 0, -currentOffsetY.current, w, h);
+    } else {
+      cam.clearViewOffset();
+    }
+    cam.updateProjectionMatrix();
   });
 
   return <OrbitControls ref={controlsRef} maxPolarAngle={Math.PI / 2.1} minDistance={20} maxDistance={1200} />;
