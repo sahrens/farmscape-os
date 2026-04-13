@@ -64,20 +64,21 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="bg-earth-800 rounded-xl p-4 border border-earth-700 space-y-3">
       <h3 className="text-sm font-semibold text-earth-200">Invite new member</h3>
+      {/* Stacked on mobile, row on larger screens */}
+      <input
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        placeholder="email@example.com"
+        className="w-full px-3 py-2.5 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 placeholder-earth-500 text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
+      />
       <div className="flex gap-2">
-        <input
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="email@example.com"
-          className="flex-1 px-3 py-2.5 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 placeholder-earth-500 text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
-        />
         <select
           value={role}
           onChange={e => setRole(e.target.value as UserRole)}
-          className="px-3 py-2.5 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
+          className="flex-1 px-3 py-2.5 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
         >
           <option value="member">Member</option>
           <option value="read">Read-only</option>
@@ -86,9 +87,9 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
         <button
           type="submit"
           disabled={loading || !email.trim()}
-          className="px-4 py-2.5 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+          className="flex-1 py-2.5 bg-forest-600 hover:bg-forest-500 disabled:bg-earth-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
         >
-          {loading ? '...' : 'Invite'}
+          {loading ? 'Sending...' : 'Send invite'}
         </button>
       </div>
       <p className="text-xs text-earth-500">{ROLE_DESCRIPTIONS[role]}</p>
@@ -98,7 +99,7 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   );
 }
 
-function MemberRow({
+function MemberCard({
   member,
   currentUserId,
   onRoleChange,
@@ -113,77 +114,80 @@ function MemberRow({
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   return (
-    <div className="bg-earth-800 rounded-xl border border-earth-700 px-4 py-3">
-      <div className="flex items-center gap-3">
-        {/* Avatar placeholder */}
-        <div className="w-9 h-9 rounded-full bg-earth-700 flex items-center justify-center text-earth-400 text-sm font-medium shrink-0">
+    <div className="bg-earth-800 rounded-xl border border-earth-700 p-4 space-y-3">
+      {/* Top row: avatar + name + badges */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-earth-700 flex items-center justify-center text-earth-400 text-sm font-medium shrink-0">
           {(member.name || member.email)[0].toUpperCase()}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-earth-100 truncate">
-              {member.name || member.email}
-            </span>
-            {member.status === 'invited' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-vanilla-900/40 text-vanilla-300">
-                invited
-              </span>
-            )}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ROLE_COLORS[member.role]}`}>
-              {ROLE_LABELS[member.role]}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-medium text-earth-100 break-all">
+              {member.name || 'No name set'}
             </span>
             {isSelf && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-earth-600 text-earth-300">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-earth-600 text-earth-300 shrink-0">
                 you
               </span>
             )}
           </div>
-          <div className="text-xs text-earth-500 flex items-center gap-2">
-            <span className="truncate">{member.email}</span>
-            <span className="text-earth-600">·</span>
-            <span>Last login: {timeAgo(member.last_login)}</span>
-          </div>
+          <p className="text-xs text-earth-500 break-all mt-0.5">{member.email}</p>
         </div>
-
-        {/* Actions */}
-        {!isSelf && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <select
-              value={member.role}
-              onChange={e => onRoleChange(member.id, e.target.value as UserRole)}
-              className="px-2 py-1.5 bg-earth-900 border border-earth-600 rounded text-earth-300 text-xs focus:outline-none focus:ring-1 focus:ring-forest-500"
-            >
-              <option value="admin">Admin</option>
-              <option value="member">Member</option>
-              <option value="read">Read-only</option>
-            </select>
-            {confirmRemove ? (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => onRemove(member.id)}
-                  className="px-2 py-1.5 bg-sunset-600 hover:bg-sunset-500 text-white text-xs rounded transition-colors"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setConfirmRemove(false)}
-                  className="px-2 py-1.5 bg-earth-700 text-earth-300 text-xs rounded hover:bg-earth-600 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmRemove(true)}
-                className="px-2 py-1.5 text-earth-500 hover:text-sunset-400 text-xs transition-colors"
-                title="Remove member"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Badges row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`text-xs px-2 py-0.5 rounded-full ${ROLE_COLORS[member.role]}`}>
+          {ROLE_LABELS[member.role]}
+        </span>
+        {member.status === 'invited' && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-vanilla-900/40 text-vanilla-300">
+            Invited
+          </span>
+        )}
+        <span className="text-xs text-earth-500 ml-auto">
+          {member.last_login ? `Active ${timeAgo(member.last_login)}` : 'Never logged in'}
+        </span>
+      </div>
+
+      {/* Actions — only for non-self */}
+      {!isSelf && (
+        <div className="flex items-center gap-2 pt-1 border-t border-earth-700">
+          <select
+            value={member.role}
+            onChange={e => onRoleChange(member.id, e.target.value as UserRole)}
+            className="flex-1 px-2.5 py-2 bg-earth-900 border border-earth-600 rounded-lg text-earth-300 text-xs focus:outline-none focus:ring-1 focus:ring-forest-500"
+          >
+            <option value="admin">Admin</option>
+            <option value="member">Member</option>
+            <option value="read">Read-only</option>
+          </select>
+          {confirmRemove ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onRemove(member.id)}
+                className="px-3 py-2 bg-sunset-600 hover:bg-sunset-500 text-white text-xs rounded-lg transition-colors"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => setConfirmRemove(false)}
+                className="px-3 py-2 bg-earth-700 text-earth-300 text-xs rounded-lg hover:bg-earth-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmRemove(true)}
+              className="px-3 py-2 text-earth-500 hover:text-sunset-400 text-xs transition-colors"
+              title="Remove member"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -238,11 +242,11 @@ function Members() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-earth-900 text-earth-100">
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-2xl mx-auto px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-4">
         <div>
           <h1 className="text-xl font-bold text-earth-50">Members</h1>
           <p className="text-sm text-earth-400 mt-1">
-            Manage who has access to the farm. {members.length} member{members.length !== 1 ? 's' : ''}.
+            {members.length} member{members.length !== 1 ? 's' : ''}
           </p>
         </div>
 
@@ -251,9 +255,9 @@ function Members() {
         {loading ? (
           <div className="text-center py-8 text-earth-500">Loading...</div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {members.map(m => (
-              <MemberRow
+              <MemberCard
                 key={m.id}
                 member={m}
                 currentUserId={user.id}
@@ -263,8 +267,6 @@ function Members() {
             ))}
           </div>
         )}
-
-        <div className="h-8" />
       </div>
     </div>
   );
