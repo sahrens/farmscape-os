@@ -4,7 +4,8 @@ import farmConfig from '@/farm.config';
 
 /**
  * NavBar — shared top navigation rendered once in App.tsx above all routes.
- * Shows farm name, route links, status filters (map view), and camera bookmarks (map view).
+ * Shows farm name, route links, status filters (map view), camera bookmarks (map view),
+ * and user menu with logout.
  */
 export function NavBar() {
   const [location, setLocation] = useLocation();
@@ -14,11 +15,15 @@ export function NavBar() {
   const setStatusFilter = useStore(s => s.setStatusFilter);
   const flyTo = useStore(s => s.flyTo);
   const elements = useStore(s => s.elements);
+  const user = useStore(s => s.user);
+  const logout = useStore(s => s.logout);
 
   const isMap = location === '/';
   const isVision = location === '/vision';
   const isData = location === '/data';
   const isFieldwork = location === '/fieldwork';
+  const isMembers = location === '/members';
+  const isAdmin = user?.role === 'admin';
 
   const activeCount = elements.filter(e => e.status === 'active').length;
   const plannedCount = elements.filter(e => e.status === 'planned').length;
@@ -57,7 +62,7 @@ export function NavBar() {
           </h1>
         </div>
 
-        {/* Right: route links + status filters (map only) */}
+        {/* Right: route links + user menu */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {/* Route links */}
           <button onClick={() => setLocation('/')} className={linkClass(isMap)}>
@@ -72,6 +77,30 @@ export function NavBar() {
           <button onClick={() => setLocation('/fieldwork')} className={linkClass(isFieldwork)}>
             Fieldwork
           </button>
+          {isAdmin && (
+            <button onClick={() => setLocation('/members')} className={linkClass(isMembers)}>
+              Members
+            </button>
+          )}
+
+          {/* User menu */}
+          {user && (
+            <>
+              <div className="w-px h-5 bg-earth-600 mx-0.5 hidden sm:block" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-earth-500 hidden sm:inline truncate max-w-[100px]">
+                  {user.name || user.email}
+                </span>
+                <button
+                  onClick={logout}
+                  className="px-2 py-1.5 rounded-lg text-[10px] font-medium text-earth-500 hover:text-earth-200 hover:bg-earth-700 transition-colors"
+                  title="Log out"
+                >
+                  Log out
+                </button>
+              </div>
+            </>
+          )}
 
           {/* Status filters — only on map view */}
           {isMap && (
