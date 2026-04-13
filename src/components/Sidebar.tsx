@@ -169,17 +169,25 @@ function ActivityForm() {
 function ElementDetail({ el }: { el: FarmElement }) {
   const activities = useStore(s => s.activities);
   const activitiesLoading = useStore(s => s.activitiesLoading);
-  const selectElement = useStore(s => s.selectElement);
   const flyTo = useStore(s => s.flyTo);
+  // Clear selection without closing sidebar — returns to element list
+  const clearSelection = () => useStore.setState({ selectedId: null });
   const u = farmConfig.unitLabel;
 
   const handleFlyTo = () => {
-    // Camera looks at the element from a reasonable distance
+    // Camera looks at the element from a comfortable distance.
+    // On mobile the bottom sheet covers ~45% of the viewport, so we
+    // offset the target upward (negative Z in scene coords) and pull
+    // the camera further back so the element sits in the visible area.
     const elHeight = el.elevation || 10;
-    const offset = Math.max(el.width || 30, el.height || 30, 40);
+    const span = Math.max(el.width || 30, el.height || 30, 60);
+    const dist = span * 2.2; // pull back further
+    const isMobile = window.innerWidth < 768;
+    // Shift target "up" on screen by moving it in the -Z direction
+    const sheetOffset = isMobile ? span * 0.6 : 0;
     flyTo(
-      [el.x + offset * 0.8, elHeight + offset * 0.6, -el.y + offset * 0.8],
-      [el.x, elHeight * 0.3, -el.y]
+      [el.x + dist * 0.7, elHeight + dist * 0.5, -el.y + dist * 0.7],
+      [el.x, elHeight * 0.3, -el.y - sheetOffset]
     );
   };
 
@@ -196,7 +204,7 @@ function ElementDetail({ el }: { el: FarmElement }) {
             📍 Focus
           </button>
           <button
-            onClick={() => selectElement(null)}
+            onClick={clearSelection}
             className="text-earth-400 hover:text-earth-200 text-2xl leading-none p-1 active:scale-90"
           >
             ×
@@ -404,12 +412,6 @@ function MobileSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      {/* Click-catcher only above the sheet — allows touch on the 3D canvas below */}
-      <div
-        className="absolute inset-x-0 top-0 z-40"
-        style={{ bottom: '45vh' }}
-        onClick={onClose}
-      />
       <div
         ref={sheetRef}
         className="absolute bottom-0 left-0 right-0 z-50 bg-earth-800 border-t border-earth-700 rounded-t-2xl shadow-2xl flex flex-col"
