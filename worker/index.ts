@@ -7,6 +7,7 @@
 export interface Env {
   DB: D1Database;
   RESEND_API_KEY: string;
+  GITHUB_TOKEN?: string; // TODO: set up fine-grained token for issue creation
   ASSETS: { fetch: (request: Request) => Promise<Response> };
 }
 
@@ -873,6 +874,190 @@ export default {
         const { results: allElements } = await env.DB.prepare('SELECT * FROM elements WHERE status != ?').bind('removed').all();
         return json({ results, elements: allElements });
       }
+    }
+
+    // =====================
+    // BUG REPORTS
+    // =====================
+
+    // Submit a bug report — any authenticated user can file
+    if (path === '/api/bug-reports' && request.method === 'POST') {
+      const user = await getSessionUser(request, env.DB);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+
+      const body = await request.json() as Record<string, unknown>;
+      const id = crypto.randomUUID();
+      const tags = body.tags ? JSON.stringify(body.tags) : null;
+
+      await env.DB.prepare(
+        `INSERT INTO bug_reports (id, user_id, title, description, severity, tags, route, screenshot_url, console_logs, user_agent, viewport, config_snapshot, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        id, user.id,
+        body.title || 'Untitled bug',
+        body.description || null,
+        body.severity || 'medium',
+        tags,
+        body.route || null,
+        body.screenshot_url || null,
+        body.console_logs || null,
+        body.user_agent || null,
+        body.viewport || null,
+        body.config_snapshot || null
+      ).run();
+
+      // Save attachments if provided
+      const attachments = (body.attachments || []) as Array<{ url: string; filename: string; mime_type: string; size_bytes: number }>;
+      for (const att of attachments) {
+        const attId = crypto.randomUUID();
+        await env.DB.prepare(
+          `INSERT INTO bug_report_attachments (id, report_id, url, filename, mime_type, size_bytes) VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(attId, id, att.url, att.filename || null, att.mime_type || null, att.size_bytes || null).run();
+      }
+
+      // Email bug report notification (non-blocking)
+      try {
+        const siteUrl = url.origin;
+        const severity = (body.severity as string) || 'medium';
+        const severityColors: Record<string, string> = {
+          critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#2563eb'
+        };
+        const sevColor = severityColors[severity] || '#ca8a04';
+        const tagList = (body.tags as string[] || []).map(
+          (t: string) => `<span style="display:inline-block;background:#f0f0f0;color:#555;padding:2px 10px;border-radius:12px;font-size:12px;margin-right:4px;">${t}</span>`
+        ).join(' ') || '<span style="color:#999;">none</span>';
+
+        const screenshotHtml = body.screenshot_url
+          ? `<div style="margin:16px 0;"><p style="font-weight:600;color:#333;margin:0 0 8px;">Screenshot</p><img src="${body.screenshot_url}" style="max-width:100%;border-radius:8px;border:1px solid #ddd;" /></div>`
+          : '';
+
+        // Format console logs nicely
+        let consoleHtml = '';
+        if (body.console_logs) {
+          try {
+            const logs = JSON.parse(body.console_logs as string) as Array<{level: string; message: string; timestamp: string}>;
+            if (logs.length > 0) {
+              const logRows = logs.slice(-20).map((l: {level: string; message: string; timestamp: string}) => {
+                const levelColor = l.level === 'error' ? '#dc2626' : l.level === 'warn' ? '#ca8a04' : '#666';
+                return `<tr><td style="color:${levelColor};font-weight:600;padding:2px 8px 2px 0;font-size:11px;white-space:nowrap;vertical-align:top;">${l.level.toUpperCase()}</td><td style="color:#333;font-size:11px;padding:2px 0;word-break:break-all;">${l.message}</td></tr>`;
+              }).join('');
+              consoleHtml = `<div style="margin:16px 0;"><p style="font-weight:600;color:#333;margin:0 0 8px;">Console Logs (last 20)</p><table style="width:100%;border-collapse:collapse;background:#f8f8f8;border-radius:8px;padding:8px;font-family:monospace;">${logRows}</table></div>`;
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
+        const emailHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+  <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;">
+    <div style="background:#2d5016;padding:20px 24px;">
+      <h1 style="color:white;margin:0;font-size:18px;">🐛 Bug Report — ${body.title || 'Untitled'}</h1>
+    </div>
+    <div style="padding:24px;">
+      <table style="width:100%;border-collapse:collapse;margin:0 0 16px;">
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Reporter</td><td style="padding:6px 0;color:#333;font-size:13px;">${user.name || user.email}</td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Severity</td><td style="padding:6px 0;"><span style="display:inline-block;background:${sevColor};color:white;padding:2px 12px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase;">${severity}</span></td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Tags</td><td style="padding:6px 0;">${tagList}</td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Route</td><td style="padding:6px 0;color:#333;font-size:13px;font-family:monospace;">${body.route || 'unknown'}</td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Viewport</td><td style="padding:6px 0;color:#333;font-size:13px;">${body.viewport || 'unknown'}</td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#999;font-size:13px;white-space:nowrap;vertical-align:top;">Report ID</td><td style="padding:6px 0;color:#333;font-size:13px;font-family:monospace;">${id}</td></tr>
+      </table>
+
+      ${body.description ? `<div style="margin:16px 0;"><p style="font-weight:600;color:#333;margin:0 0 8px;">Description</p><p style="color:#555;font-size:14px;line-height:1.5;margin:0;white-space:pre-wrap;">${body.description}</p></div>` : ''}
+
+      ${screenshotHtml}
+      ${consoleHtml}
+
+      <div style="margin:24px 0 0;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        <p style="margin:0 0 4px;font-weight:600;color:#92400e;font-size:13px;">📋 TODO: GitHub Integration</p>
+        <p style="margin:0;color:#92400e;font-size:12px;">Set up a fine-grained GitHub token (repo: sahrens/farmscape-os, permission: Issues R/W) to auto-create GitHub issues from bug reports.</p>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'Kahiliholo Farm <onboarding@resend.dev>',
+            to: ['spencer.ahrens@gmail.com'],
+            subject: `🐛 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
+            html: emailHtml,
+            text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
+          }),
+        });
+      } catch {
+        // Email notification failed — non-critical, report is still saved in D1
+      }
+
+      // TODO: Create GitHub issue when GITHUB_TOKEN is configured
+      let githubIssueUrl: string | null = null;
+      let githubIssueNumber: number | null = null;
+
+      return json({ ok: true, id, github_issue_url: githubIssueUrl, github_issue_number: githubIssueNumber });
+    }
+
+    // List bug reports — admin only
+    if (path === '/api/bug-reports' && request.method === 'GET') {
+      const user = await getSessionUser(request, env.DB);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+
+      const status = url.searchParams.get('status') || 'open';
+      const { results } = await env.DB.prepare(
+        `SELECT br.*, u.name as reporter_name, u.email as reporter_email
+         FROM bug_reports br
+         LEFT JOIN users u ON br.user_id = u.id
+         WHERE br.status = ?
+         ORDER BY br.created_at DESC
+         LIMIT 100`
+      ).bind(status).all();
+
+      return json({ reports: results });
+    }
+
+    // Get single bug report with attachments — admin only
+    if (path.startsWith('/api/bug-reports/') && request.method === 'GET') {
+      const user = await getSessionUser(request, env.DB);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+
+      const reportId = path.replace('/api/bug-reports/', '');
+      const report = await env.DB.prepare('SELECT * FROM bug_reports WHERE id = ?').bind(reportId).first();
+      if (!report) return json({ error: 'Not found' }, 404);
+
+      // Non-admins can only view their own reports
+      if (!isAdmin(user.role) && report.user_id !== user.id) {
+        return json({ error: 'Access denied' }, 403);
+      }
+
+      const { results: attachments } = await env.DB.prepare(
+        'SELECT * FROM bug_report_attachments WHERE report_id = ?'
+      ).bind(reportId).all();
+
+      return json({ report, attachments });
+    }
+
+    // Upload attachment for a bug report (base64 encoded in JSON body)
+    if (path === '/api/bug-reports/upload' && request.method === 'POST') {
+      const user = await getSessionUser(request, env.DB);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+
+      // Accept base64 data URL and store it directly
+      // In a production setup, this would go to S3/R2, but for now we store the data URL
+      const { data, filename, mime_type, report_id } = await request.json() as {
+        data: string; filename: string; mime_type: string; report_id: string;
+      };
+
+      const attId = crypto.randomUUID();
+      const size = Math.round((data.length * 3) / 4); // approximate base64 → bytes
+
+      await env.DB.prepare(
+        `INSERT INTO bug_report_attachments (id, report_id, url, filename, mime_type, size_bytes) VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(attId, report_id, data, filename, mime_type, size).run();
+
+      return json({ ok: true, id: attId });
     }
 
     // Fallback — pass non-API routes to static assets (SPA)

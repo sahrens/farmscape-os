@@ -127,6 +127,62 @@ export const sync = {
     ),
 };
 
+// Bug Reports
+export interface BugReport {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  severity: string;
+  tags: string | null;
+  route: string | null;
+  screenshot_url: string | null;
+  console_logs: string | null;
+  user_agent: string | null;
+  viewport: string | null;
+  config_snapshot: string | null;
+  github_issue_url: string | null;
+  github_issue_number: number | null;
+  status: string;
+  created_at: string;
+  reporter_name?: string;
+  reporter_email?: string;
+}
+
+export const bugReports = {
+  submit: (report: {
+    title: string;
+    description?: string;
+    severity?: string;
+    tags?: string[];
+    route?: string;
+    screenshot_url?: string;
+    console_logs?: string;
+    user_agent?: string;
+    viewport?: string;
+    config_snapshot?: string;
+    attachments?: Array<{ url: string; filename: string; mime_type: string; size_bytes: number }>;
+  }) =>
+    request<{ ok: boolean; id: string; github_issue_url: string | null; github_issue_number: number | null }>(
+      '/api/bug-reports',
+      { method: 'POST', body: JSON.stringify(report) }
+    ),
+
+  list: (status = 'open') =>
+    request<{ reports: BugReport[] }>(`/api/bug-reports?status=${status}`),
+
+  get: (id: string) =>
+    request<{ report: BugReport; attachments: Array<{ id: string; url: string; filename: string; mime_type: string }> }>(
+      `/api/bug-reports/${id}`
+    ),
+
+  upload: (data: string, filename: string, mimeType: string, reportId: string) =>
+    request<{ ok: boolean; id: string }>('/api/bug-reports/upload', {
+      method: 'POST',
+      body: JSON.stringify({ data, filename, mime_type: mimeType, report_id: reportId }),
+    }),
+};
+
 // Data Explorer
 export interface TableInfo {
   name: string;

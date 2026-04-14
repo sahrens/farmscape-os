@@ -175,16 +175,35 @@ function ElementDetail({ el }: { el: FarmElement }) {
   const u = farmConfig.unitLabel;
 
   const handleFlyTo = () => {
-    // Camera looks at the element from a comfortable distance.
-    // No target offset needed — the Canvas viewport is resized to the
-    // visible area above the mobile sheet, so orbit centers naturally.
+    // Preserve current bearing/yaw — only change distance and pitch.
+    // We read the current camera position from the Three.js canvas to
+    // compute the current horizontal angle, then position the camera at
+    // that same angle around the element.
     const elHeight = el.elevation || 10;
     const span = Math.max(el.width || 30, el.height || 30, 60);
     const dist = span * 2.2;
-    flyTo(
-      [el.x + dist * 0.7, elHeight + dist * 0.5, -el.y + dist * 0.7],
-      [el.x, elHeight * 0.3, -el.y]
-    );
+    const targetPos: [number, number, number] = [el.x, elHeight * 0.3, -el.y];
+
+    // Try to read current camera bearing from the Three.js canvas
+    const canvas = document.querySelector('canvas');
+    let bearing = Math.PI / 4; // default 45° if we can't read it
+    if (canvas && (canvas as any).__r3f) {
+      const cam = (canvas as any).__r3f.store?.getState()?.camera;
+      if (cam) {
+        // Horizontal angle from current camera to element target
+        const dx = cam.position.x - targetPos[0];
+        const dz = cam.position.z - targetPos[2];
+        bearing = Math.atan2(dx, dz);
+      }
+    }
+
+    // Fixed pitch angle (~30° above horizon)
+    const pitch = Math.PI / 6;
+    const camX = targetPos[0] + dist * Math.sin(bearing) * Math.cos(pitch);
+    const camY = targetPos[1] + dist * Math.sin(pitch);
+    const camZ = targetPos[2] + dist * Math.cos(bearing) * Math.cos(pitch);
+
+    flyTo([camX, camY, camZ], targetPos);
   };
 
   return (

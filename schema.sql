@@ -135,6 +135,39 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Bug reports: user-submitted issues with screenshots, logs, and metadata
+CREATE TABLE IF NOT EXISTS bug_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  severity TEXT DEFAULT 'medium',  -- 'low', 'medium', 'high', 'critical'
+  tags TEXT,                        -- JSON array of tags
+  route TEXT,                       -- current route when report was filed
+  screenshot_url TEXT,              -- auto-captured screenshot
+  console_logs TEXT,                -- captured console log entries (JSON)
+  user_agent TEXT,
+  viewport TEXT,                    -- e.g. '390x844'
+  config_snapshot TEXT,             -- JSON snapshot of farm config
+  github_issue_url TEXT,            -- link to the created GitHub issue
+  github_issue_number INTEGER,
+  status TEXT DEFAULT 'open',       -- 'open', 'in_progress', 'resolved', 'closed'
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+
+-- Bug report attachments: user-uploaded images/videos
+CREATE TABLE IF NOT EXISTS bug_report_attachments (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  filename TEXT,
+  mime_type TEXT,
+  size_bytes INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (report_id) REFERENCES bug_reports(id)
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -150,3 +183,6 @@ CREATE INDEX IF NOT EXISTS idx_gps_tracks_session ON gps_tracks(session_id);
 CREATE INDEX IF NOT EXISTS idx_changelog_table ON changelog(table_name);
 CREATE INDEX IF NOT EXISTS idx_changelog_row ON changelog(row_id);
 CREATE INDEX IF NOT EXISTS idx_changelog_created ON changelog(created_at);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON bug_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
+CREATE INDEX IF NOT EXISTS idx_bug_attachments_report ON bug_report_attachments(report_id);
