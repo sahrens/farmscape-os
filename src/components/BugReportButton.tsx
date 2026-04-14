@@ -149,7 +149,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         aria-label="Report a bug"
       >
-        🐛
+        🪲
       </button>
 
       {/* Modal overlay */}
@@ -163,7 +163,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
             {/* Header */}
             <div className="sticky top-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                {submitted ? '✅ Bug Reported' : '🐛 Report a Bug'}
+                {submitted ? '✅ Bug Reported' : '🪲 Report a Bug'}
               </h2>
               <button onClick={handleClose} className="text-zinc-400 hover:text-zinc-600 text-xl leading-none">✕</button>
             </div>
