@@ -139,11 +139,11 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
 
   return (
     <>
-      {/* Subtle bug nub — small, muted, bottom-right. Uses CSS var for safe area. */}
+      {/* Bug report nub — visible but not intrusive */}
       <button
         onClick={handleOpen}
-        className="fixed z-50 w-7 h-7 rounded-full bg-earth-700/60 text-earth-500 hover:bg-earth-600/80 hover:text-earth-300 flex items-center justify-center backdrop-blur-sm active:scale-90 transition-all text-sm opacity-50 hover:opacity-100"
-        style={{ bottom: '0.75rem', right: '0.75rem' }}
+        className="fixed z-50 w-9 h-9 rounded-full bg-earth-700/80 text-earth-400 hover:bg-earth-600 hover:text-earth-200 flex items-center justify-center backdrop-blur-sm active:scale-90 transition-all text-base shadow-md border border-earth-600/50"
+        style={{ bottom: '1rem', right: '1rem' }}
         aria-label="Report a bug"
       >
         🪲
