@@ -143,7 +143,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
       <button
         onClick={handleOpen}
         className="fixed z-50 w-7 h-7 rounded-full bg-earth-700/60 text-earth-500 hover:bg-earth-600/80 hover:text-earth-300 flex items-center justify-center backdrop-blur-sm active:scale-90 transition-all text-sm opacity-50 hover:opacity-100"
-        style={{ bottom: 'calc(0.75rem + var(--sab, 0px))', right: '0.75rem' }}
+        style={{ bottom: '0.75rem', right: '0.75rem' }}
         aria-label="Report a bug"
       >
         🪲

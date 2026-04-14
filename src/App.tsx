@@ -184,7 +184,7 @@ export default function App() {
 
   return (
     <AuthGuard>
-      <div className="app-shell h-full flex flex-col bg-earth-900">
+      <div className="h-full flex flex-col bg-earth-900">
         <NavBar />
         {/* Dashboard always mounted, hidden when not on map route */}
         <Dashboard visible={isMapRoute} />
