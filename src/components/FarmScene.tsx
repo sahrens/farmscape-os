@@ -35,6 +35,11 @@ class CanvasErrorBoundary extends Component<{ children: ReactNode }, ErrorBounda
   }
 }
 
+// ─── Element group registry ──────────────────────────────────────
+// Module-level map so the edit gizmo can imperatively move element groups
+// during drag WITHOUT touching zustand (zero re-renders).
+const elementGroupRegistry = new Map<string, THREE.Group>();
+
 // Merge default + farm-specific colors
 const COLORS: Record<string, string> = {
   ...DEFAULT_COLORS,
@@ -326,10 +331,12 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
   );
 }
 
-// ─── Edit mode handles ─────────────────────────────────────────────
-// Rendered at Scene level (not inside ElementMesh) to avoid remount during drag.
-// Design: pinhead sphere on a tall stick (drag to move), flat ring at ground (drag to rotate).
-// Uses global window pointerup/pointermove for robust touch handling.
+// ─── Edit mode gizmo ──────────────────────────────────────────────
+// PURELY IMPERATIVE during drag:
+// - Stores pointer coords in a ref
+// - useFrame raycasts and moves Three.js objects directly via registry
+// - ZERO zustand updates during drag → zero React re-renders
+// - Only writes to store ONCE on pointer up
 
 function EditGizmo() {
   const editingElementId = useStore(s => s.editingElementId);
@@ -340,35 +347,51 @@ function EditGizmo() {
 function EditGizmoInner({ elementId }: { elementId: string }) {
   const { camera, raycaster, gl } = useThree();
   const modeRef = useRef<'idle' | 'drag' | 'rotate'>('idle');
+
+  // Gizmo visual refs
   const poleRef = useRef<THREE.Group>(null);
-  const pinRef = useRef<THREE.Mesh>(null);
   const pinMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringGroupRef = useRef<THREE.Group>(null);
   const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const dirRef = useRef<THREE.Mesh>(null);
+
+  // Reusable math objects (allocated once, never GC'd)
   const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersectPoint = useMemo(() => new THREE.Vector3(), []);
   const pointerNDC = useMemo(() => new THREE.Vector2(), []);
 
-  // Element sizing
-  const initEl = useStore(s => s.elements.find(e => e.id === elementId));
+  // Snapshot element data on mount (read once, never again during drag)
+  const initEl = useStore.getState().elements.find(e => e.id === elementId);
   const elHeight = initEl?.elevation || 20;
-  const pinHeight = elHeight + 25; // tall stick above element
-  const pinRadius = 5; // large sphere at top — easy to grab
+  const pinHeight = elHeight + 25;
+  const pinRadius = 5;
   const ringRadius = Math.max(initEl?.width || 10, initEl?.height || 10, 10) * 0.5 + 5;
   const ringThickness = 3;
 
-  // Convert DOM event coords to NDC for raycasting
+  // Current position/rotation during drag — local refs, NOT store
+  const localPosRef = useRef({ x: initEl?.x || 0, y: initEl?.y || 0 });
+  const localRotRef = useRef(initEl?.rotation || 0);
+  // The element group's Y position (varies by type)
+  const groupYRef = useRef(0);
+
+  // Snapshot the element group's initial Y from the registry
+  useEffect(() => {
+    const group = elementGroupRegistry.get(elementId);
+    if (group) {
+      groupYRef.current = group.position.y;
+    }
+  }, [elementId]);
+
+  // Latest pointer coords — written by pointermove, read by useFrame
+  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+
   const toNDC = useCallback((clientX: number, clientY: number) => {
     const rect = gl.domElement.getBoundingClientRect();
     pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   }, [gl, pointerNDC]);
 
-  // Store latest pointer position in a ref — only apply in useFrame to throttle updates
-  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Global pointer move — just stores coords, doesn't update store
+  // Global pointer listeners
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       if (modeRef.current === 'idle') return;
@@ -380,7 +403,8 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
       const wasDrag = modeRef.current === 'drag';
       modeRef.current = 'idle';
       latestPointerRef.current = null;
-      // Reset visuals
+
+      // Reset handle visuals
       if (wasDrag && pinMatRef.current) {
         pinMatRef.current.color.set('#4488ff');
         pinMatRef.current.opacity = 0.8;
@@ -389,7 +413,17 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
         ringMatRef.current.color.set('#ff6622');
         ringMatRef.current.opacity = 0.5;
       }
-      useStore.getState().persistElement(elementId);
+
+      // NOW write to store — one single update
+      const pos = localPosRef.current;
+      const rot = localRotRef.current;
+      const store = useStore.getState();
+      if (wasDrag) {
+        store.moveElement(elementId, pos.x, pos.y);
+      } else {
+        store.rotateElement(elementId, rot);
+      }
+      store.persistElement(elementId);
     };
 
     window.addEventListener('pointermove', onMove, { passive: true });
@@ -400,40 +434,63 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [elementId, gl]);
+  }, [elementId, gl, toNDC]);
 
-  // Single useFrame: applies drag/rotate from latest pointer AND updates visuals
+  // useFrame: raycast + move Three.js objects imperatively. No store writes.
   useFrame(() => {
-    const el = useStore.getState().elements.find(e => e.id === elementId);
-    if (!el) return;
-
-    // Apply drag/rotate from latest pointer (throttled to frame rate)
     const ptr = latestPointerRef.current;
     if (ptr && modeRef.current !== 'idle') {
       toNDC(ptr.x, ptr.y);
       raycaster.setFromCamera(pointerNDC, camera);
       if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
         if (modeRef.current === 'drag') {
-          useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
+          const newX = intersectPoint.x;
+          const newY = -intersectPoint.z; // Three.js z → farm y
+          localPosRef.current = { x: newX, y: newY };
+
+          // Move the element's actual group imperatively
+          const elGroup = elementGroupRegistry.get(elementId);
+          if (elGroup) {
+            elGroup.position.x = newX;
+            elGroup.position.z = -newY;
+            // Keep the original Y (height varies by element type)
+          }
+
+          // Move gizmo visuals
+          if (poleRef.current) {
+            poleRef.current.position.x = newX;
+            poleRef.current.position.z = -newY;
+          }
+          if (ringGroupRef.current) {
+            ringGroupRef.current.position.x = newX;
+            ringGroupRef.current.position.z = -newY;
+          }
+          if (dirRef.current) {
+            const rad = (localRotRef.current * Math.PI) / 180;
+            dirRef.current.position.x = newX + ringRadius * Math.sin(rad);
+            dirRef.current.position.z = -newY + ringRadius * Math.cos(rad);
+          }
         } else if (modeRef.current === 'rotate') {
-          const dx = intersectPoint.x - el.x;
-          const dz = intersectPoint.z - (-el.y);
+          const pos = localPosRef.current;
+          const dx = intersectPoint.x - pos.x;
+          const dz = intersectPoint.z - (-pos.y);
           const degrees = (Math.atan2(dx, dz) * 180) / Math.PI;
-          useStore.getState().rotateElement(elementId, degrees);
+          localRotRef.current = degrees;
+
+          // Rotate the element's actual group imperatively
+          const elGroup = elementGroupRegistry.get(elementId);
+          if (elGroup) {
+            elGroup.rotation.y = (degrees * Math.PI) / 180;
+          }
+
+          // Update direction indicator
+          if (dirRef.current) {
+            const rad = (degrees * Math.PI) / 180;
+            dirRef.current.position.x = pos.x + ringRadius * Math.sin(rad);
+            dirRef.current.position.z = -pos.y + ringRadius * Math.cos(rad);
+          }
         }
       }
-    }
-
-    // Update visual positions
-    if (poleRef.current) poleRef.current.position.set(el.x, 0, -el.y);
-    if (ringGroupRef.current) ringGroupRef.current.position.set(el.x, 0.5, -el.y);
-    if (dirRef.current) {
-      const rad = (el.rotation * Math.PI) / 180;
-      dirRef.current.position.set(
-        el.x + ringRadius * Math.sin(rad),
-        2,
-        -el.y + ringRadius * Math.cos(rad),
-      );
     }
   });
 
@@ -463,7 +520,6 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
         </mesh>
         {/* Pinhead sphere — large, easy to grab */}
         <mesh
-          ref={pinRef}
           position={[0, pinHeight, 0]}
           onPointerDown={onPinDown}
         >
@@ -628,8 +684,11 @@ function CameraController() {
   );
 }
 
-// Element renderer
+// ─── Element renderer ──────────────────────────────────────────────
+// Registers its outermost group into the registry so the gizmo can
+// move it imperatively during drag.
 function ElementMesh({ el }: { el: FarmElement }) {
+  const groupRef = useRef<THREE.Group>(null);
   const selectedId = useStore(s => s.selectedId);
   const selectElement = useStore(s => s.selectElement);
   const editMode = useStore(s => s.editMode);
@@ -637,9 +696,18 @@ function ElementMesh({ el }: { el: FarmElement }) {
   const enterEditMode = useStore(s => s.enterEditMode);
   const selected = selectedId === el.id;
 
+  // Register/unregister group in the module-level registry
+  useEffect(() => {
+    if (groupRef.current) {
+      elementGroupRegistry.set(el.id, groupRef.current);
+    }
+    return () => {
+      elementGroupRegistry.delete(el.id);
+    };
+  }, [el.id]);
+
   const onClick = useCallback(() => {
     if (editMode) {
-      // In edit mode, clicking an element switches editing to it
       enterEditMode(el.id);
     } else {
       selectElement(el.id);
@@ -648,8 +716,9 @@ function ElementMesh({ el }: { el: FarmElement }) {
 
   const isEditing = editMode && editingElementId === el.id;
 
+  // Wrap each element type in a group that we can register
   return (
-    <>
+    <group ref={groupRef}>
       {(() => {
         switch (el.type) {
           case 'structure':
@@ -664,8 +733,7 @@ function ElementMesh({ el }: { el: FarmElement }) {
             return null;
         }
       })()}
-      {/* Edit handles rendered at Scene level, not here */}
-    </>
+    </group>
   );
 }
 
@@ -676,7 +744,6 @@ function Scene() {
   const statusFilter = useStore(s => s.statusFilter);
   const selectElement = useStore(s => s.selectElement);
   const editMode = useStore(s => s.editMode);
-  const editingElementId = useStore(s => s.editingElementId);
   const exitEditMode = useStore(s => s.exitEditMode);
 
   const filtered = useMemo(() => {
@@ -762,10 +829,9 @@ export function FarmScene() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const onLost = (e: Event) => {
-      e.preventDefault(); // allows context restore
+      e.preventDefault();
       console.error('[FarmScene] WebGL context lost');
       setContextLost(true);
-      // Exit edit mode to prevent further drag updates
       useStore.getState().exitEditMode();
     };
     const onRestored = () => {
@@ -778,7 +844,7 @@ export function FarmScene() {
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);
     };
-  }, [ready]); // re-attach after canvas is created
+  }, [ready]);
 
   return (
     <div className="w-full h-full relative">
