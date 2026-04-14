@@ -1,12 +1,12 @@
 /**
  * FarmscapeOS API Worker
  * Cloudflare Worker with D1 database
- * Auth: email OTP via Resend, session cookies, role-based permissions
+ * Auth: email OTP via AgentMail, session cookies, role-based permissions
  */
 
 export interface Env {
   DB: D1Database;
-  RESEND_API_KEY: string;
+  AGENTMAIL_API_KEY: string;
   GITHUB_TOKEN?: string; // TODO: set up fine-grained token for issue creation
   ASSETS: { fetch: (request: Request) => Promise<Response> };
 }
@@ -77,18 +77,18 @@ async function getSessionUser(request: Request, db: D1Database): Promise<Session
 async function sendOtpEmail(email: string, code: string, farmName: string, siteUrl: string, apiKey: string): Promise<boolean> {
   const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(email)}&code=${code}`;
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `Eva & Spencer <onboarding@resend.dev>`,
+        from_name: `Farmscape-OS - ${farmName}`,
         to: [email],
         subject: `${farmName} — Tap to log in`,
-        text: `Hi there!\n\nTap this link to log in to ${farmName}:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Eva & Spencer`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+        body_text: `Hi there!\n\nTap this link to log in to ${farmName}:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Eva & Spencer`,
+        body_html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
   <h2 style="color: #2d5016; margin: 0 0 8px;">🌿 ${farmName}</h2>
   <p style="color: #666; margin: 0 0 24px;">Tap the button to log in:</p>
   <a href="${magicLink}" style="display: inline-block; background: #2d5016; color: white; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-weight: 600; font-size: 18px; margin: 0 0 24px;">Log in to ${farmName}</a>
@@ -117,18 +117,18 @@ async function sendInviteEmail(
 ): Promise<boolean> {
   const roleLabel = role === 'admin' ? 'an admin' : role === 'member' ? 'a member' : 'a viewer';
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `Eva & Spencer <onboarding@resend.dev>`,
+        from_name: `Farmscape-OS - ${farmName}`,
         to: [email],
         subject: `${inviterName} invited you to ${farmName}`,
-        text: `Hi!\n\n${inviterName} has invited you as ${roleLabel} to ${farmName}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Eva & Spencer`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+        body_text: `Hi!\n\n${inviterName} has invited you as ${roleLabel} to ${farmName}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Eva & Spencer`,
+        body_html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
   <h2 style="color: #2d5016; margin: 0 0 8px;">🌿 ${farmName}</h2>
   <p style="color: #333; margin: 0 0 16px;">${inviterName} has invited you as <strong>${roleLabel}</strong>.</p>
   <a href="${siteUrl}" style="display: inline-block; background: #2d5016; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">Open ${farmName}</a>
@@ -214,7 +214,7 @@ export default {
       // Send email
       const farmName = 'Kahiliholo Farm';
       const siteUrl = url.origin;
-      const sent = await sendOtpEmail(normalizedEmail, code, farmName, siteUrl, env.RESEND_API_KEY);
+      const sent = await sendOtpEmail(normalizedEmail, code, farmName, siteUrl, env.AGENTMAIL_API_KEY);
       if (!sent) {
         return json({ error: 'Failed to send email. Please try again.' }, 500);
       }
@@ -423,7 +423,7 @@ export default {
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
         const farmName = 'Kahiliholo Farm';
-        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env.RESEND_API_KEY);
+        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY);
 
         await logChange(env.DB, 'users', id, 'invite', user.id, { email: normalizedEmail, role: memberRole });
         return json({ ok: true, id });
@@ -443,7 +443,7 @@ export default {
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
         const farmName = 'Kahiliholo Farm';
-        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.RESEND_API_KEY);
+        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY);
         if (!sent) return json({ error: 'Failed to send email' }, 500);
         return json({ ok: true });
       }
@@ -974,18 +974,18 @@ export default {
   </div>
 </div>`;
 
-        await fetch('https://api.resend.com/emails', {
+        await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Authorization': `Bearer ${env.AGENTMAIL_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'Kahiliholo Farm <onboarding@resend.dev>',
+            from_name: 'Farmscape-OS - Kahiliholo Farm',
             to: ['spencer.ahrens@gmail.com'],
             subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
-            html: emailHtml,
-            text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
+            body_html: emailHtml,
+            body_text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
           }),
         });
       } catch {

@@ -19,4 +19,7 @@
 - [x] Fix: blank screen crash during drag — likely WebGL context loss, not React error
 - [x] Add webglcontextlost recovery to Canvas
 - [x] Throttle drag updates to reduce GPU pressure
-- [ ] Fix: rewrite drag to be purely imperative Three.js (no store updates during drag, only on pointer up)
+- [x] Fix: rewrite drag to be purely imperative Three.js (no store updates during drag, only on pointer up)
+- [ ] Fix drag offset jump — pin should track touch point exactly, element stays under pin
+- [ ] Make drag pin taller
+- [ ] Set up login/invite emails via Resend with sender name "Farmscape-OS - Kahiliholo Farm"
