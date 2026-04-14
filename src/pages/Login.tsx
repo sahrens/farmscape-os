@@ -15,7 +15,7 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const setUser = useStore(s => s.setUser);
-  const cooldownRef = useRef<ReturnType<typeof setInterval>>();
+  const cooldownRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Handle ?error= query param from magic link redirect

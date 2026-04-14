@@ -10,7 +10,11 @@ export default defineConfig({
     __BUILD_HASH__: JSON.stringify(buildHash),
   },
   plugins: [
-    react(),
+    react({
+      jsxRuntime: 'automatic',
+      // Disable jsxDEV in production to prevent source file paths from leaking into the bundle
+      ...(process.env.NODE_ENV === 'production' ? { jsxDev: false } : {}),
+    }),
     tailwindcss(),
     {
       name: 'inject-build-hash',

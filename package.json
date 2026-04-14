@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "NODE_ENV=production tsc -b && NODE_ENV=production vite build",
+    "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:bundle": "pnpm build && vitest run tests/bundle-security.test.ts",
     "init": "node scripts/init.mjs"
   },
   "dependencies": {
@@ -38,6 +40,7 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
-    "vite": "^8.0.4"
+    "vite": "^8.0.4",
+    "vitest": "^4.1.4"
   }
 }
