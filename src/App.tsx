@@ -1,4 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { useConsoleCapture } from '@/hooks/useConsoleCapture';
+import { BugReportButton } from '@/components/BugReportButton';
+import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { Route, Switch, useLocation } from 'wouter';
 import { useStore } from '@/lib/store';
 import * as api from '@/lib/api';
@@ -174,6 +177,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
  * to prevent the black screen on route switch.
  */
 export default function App() {
+  useVersionCheck();
+  const consoleLogs = useConsoleCapture();
   const [location] = useLocation();
   const isMapRoute = location === '/';
 
@@ -198,6 +203,8 @@ export default function App() {
             </Switch>
           </Suspense>
         )}
+        {/* Bug report floating button */}
+        <BugReportButton consoleLogs={consoleLogs} />
       </div>
     </AuthGuard>
   );
