@@ -298,48 +298,60 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 }
 
 // ─── Edit mode handles ─────────────────────────────────────────────
-// Drag handle: a flat disc on the ground that can be dragged to move the element
-function DragHandle({ el }: { el: FarmElement }) {
+// Drag handle: reads element from store by ID, uses ref for drag state to avoid remount issues
+function DragHandle({ elementId }: { elementId: string }) {
   const { camera, raycaster, pointer } = useThree();
-  const moveElement = useStore(s => s.moveElement);
-  const persistElement = useStore(s => s.persistElement);
-  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+  const groupRef = useRef<THREE.Group>(null);
+  const discMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersectPoint = useMemo(() => new THREE.Vector3(), []);
 
-  // Use a frame loop to update position while dragging
+  // Read element data directly from store in the frame loop — no prop dependency
   useFrame(() => {
-    if (!dragging) return;
+    const el = useStore.getState().elements.find(e => e.id === elementId);
+    if (!el) return;
+
+    // Update group position to follow element
+    if (groupRef.current) {
+      groupRef.current.position.set(el.x, 0.5, -el.y);
+    }
+
+    if (!draggingRef.current) return;
     raycaster.setFromCamera(pointer, camera);
     if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-      // intersectPoint.x = local x, intersectPoint.z = -local y
-      moveElement(el.id, intersectPoint.x, -intersectPoint.z);
+      useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
     }
   });
 
   const handlePointerDown = useCallback((e: any) => {
     e.stopPropagation();
-    (e.target as HTMLElement)?.setPointerCapture?.(e.nativeEvent?.pointerId);
-    setDragging(true);
+    draggingRef.current = true;
+    if (discMatRef.current) discMatRef.current.opacity = 0.5;
   }, []);
 
   const handlePointerUp = useCallback(() => {
-    setDragging(false);
-    persistElement(el.id);
-  }, [el.id, persistElement]);
+    draggingRef.current = false;
+    if (discMatRef.current) discMatRef.current.opacity = 0.3;
+    useStore.getState().persistElement(elementId);
+  }, [elementId]);
 
-  const radius = Math.max(el.width || 10, el.height || 10, 8) * 0.5;
+  // Compute initial radius from element
+  const el = useStore(s => s.elements.find(e => e.id === elementId));
+  const radius = Math.max(el?.width || 10, el?.height || 10, 8) * 0.5;
 
   return (
-    <group position={[el.x, 0.5, -el.y]}>
+    <group ref={groupRef} position={el ? [el.x, 0.5, -el.y] : [0, 0, 0]}>
       {/* Move disc */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
       >
         <circleGeometry args={[radius, 32]} />
-        <meshBasicMaterial color="#4488ff" transparent opacity={dragging ? 0.5 : 0.3} side={THREE.DoubleSide} />
+        <meshBasicMaterial ref={discMatRef} color="#4488ff" transparent opacity={0.3} side={THREE.DoubleSide} />
       </mesh>
       {/* Move icon: arrows */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
@@ -355,60 +367,75 @@ function DragHandle({ el }: { el: FarmElement }) {
   );
 }
 
-// Rotation handle: an arc at the edge that can be dragged to rotate
-function RotateHandle({ el }: { el: FarmElement }) {
+// Rotation handle: reads element from store by ID, uses ref for drag state
+function RotateHandle({ elementId }: { elementId: string }) {
   const { camera, raycaster, pointer } = useThree();
-  const rotateElement = useStore(s => s.rotateElement);
-  const persistElement = useStore(s => s.persistElement);
-  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+  const groupRef = useRef<THREE.Group>(null);
+  const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const indicatorRef = useRef<THREE.Mesh>(null);
   const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersectPoint = useMemo(() => new THREE.Vector3(), []);
 
+  const el = useStore(s => s.elements.find(e => e.id === elementId));
+  const radius = Math.max(el?.width || 10, el?.height || 10, 8) * 0.6 + 3;
+
   useFrame(() => {
-    if (!dragging) return;
+    const currentEl = useStore.getState().elements.find(e => e.id === elementId);
+    if (!currentEl) return;
+
+    // Update group position
+    if (groupRef.current) {
+      groupRef.current.position.set(currentEl.x, 1, -currentEl.y);
+    }
+    // Update direction indicator position
+    if (indicatorRef.current) {
+      const rad = (currentEl.rotation * Math.PI) / 180;
+      indicatorRef.current.position.set(
+        (radius + 1) * Math.sin(rad),
+        0.5,
+        (radius + 1) * Math.cos(rad),
+      );
+    }
+
+    if (!draggingRef.current) return;
     raycaster.setFromCamera(pointer, camera);
     if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-      // Compute angle from element center to pointer
-      const dx = intersectPoint.x - el.x;
-      const dz = intersectPoint.z - (-el.y);
-      const angle = Math.atan2(dx, dz); // radians, 0 = north
+      const dx = intersectPoint.x - currentEl.x;
+      const dz = intersectPoint.z - (-currentEl.y);
+      const angle = Math.atan2(dx, dz);
       const degrees = (angle * 180) / Math.PI;
-      rotateElement(el.id, degrees);
+      useStore.getState().rotateElement(elementId, degrees);
     }
   });
 
   const handlePointerDown = useCallback((e: any) => {
     e.stopPropagation();
-    (e.target as HTMLElement)?.setPointerCapture?.(e.nativeEvent?.pointerId);
-    setDragging(true);
+    draggingRef.current = true;
+    if (ringMatRef.current) { ringMatRef.current.color.set('#ff8844'); ringMatRef.current.opacity = 0.7; }
   }, []);
 
   const handlePointerUp = useCallback(() => {
-    setDragging(false);
-    persistElement(el.id);
-  }, [el.id, persistElement]);
-
-  const radius = Math.max(el.width || 10, el.height || 10, 8) * 0.6 + 3;
+    draggingRef.current = false;
+    if (ringMatRef.current) { ringMatRef.current.color.set('#ff6622'); ringMatRef.current.opacity = 0.5; }
+    useStore.getState().persistElement(elementId);
+  }, [elementId]);
 
   return (
-    <group position={[el.x, 1, -el.y]}>
+    <group ref={groupRef} position={el ? [el.x, 1, -el.y] : [0, 0, 0]}>
       {/* Rotation ring */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
       >
         <ringGeometry args={[radius, radius + 2, 32]} />
-        <meshBasicMaterial color={dragging ? '#ff8844' : '#ff6622'} transparent opacity={dragging ? 0.7 : 0.5} side={THREE.DoubleSide} />
+        <meshBasicMaterial ref={ringMatRef} color="#ff6622" transparent opacity={0.5} side={THREE.DoubleSide} />
       </mesh>
-      {/* Direction indicator — small sphere at current rotation angle */}
-      <mesh
-        position={[
-          (radius + 1) * Math.sin((el.rotation * Math.PI) / 180),
-          0.5,
-          (radius + 1) * Math.cos((el.rotation * Math.PI) / 180),
-        ]}
-      >
+      {/* Direction indicator */}
+      <mesh ref={indicatorRef}>
         <sphereGeometry args={[1.5, 8, 8]} />
         <meshBasicMaterial color="#ff6622" />
       </mesh>
@@ -416,12 +443,12 @@ function RotateHandle({ el }: { el: FarmElement }) {
   );
 }
 
-// Edit handles wrapper — shows drag + rotate for the editing element
-function EditHandles({ el }: { el: FarmElement }) {
+// Edit handles wrapper
+function EditHandles({ elementId }: { elementId: string }) {
   return (
     <>
-      <DragHandle el={el} />
-      <RotateHandle el={el} />
+      <DragHandle elementId={elementId} />
+      <RotateHandle elementId={elementId} />
     </>
   );
 }
@@ -593,7 +620,7 @@ function ElementMesh({ el }: { el: FarmElement }) {
             return null;
         }
       })()}
-      {isEditing && <EditHandles el={el} />}
+      {isEditing && <EditHandles elementId={el.id} />}
     </>
   );
 }
