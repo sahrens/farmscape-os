@@ -365,30 +365,21 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
     pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   }, [gl, pointerNDC]);
 
-  // Global pointer move — runs outside R3F event system
+  // Store latest pointer position in a ref — only apply in useFrame to throttle updates
+  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Global pointer move — just stores coords, doesn't update store
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       if (modeRef.current === 'idle') return;
-      const el = useStore.getState().elements.find(e2 => e2.id === elementId);
-      if (!el) return;
-      toNDC(e.clientX, e.clientY);
-      raycaster.setFromCamera(pointerNDC, camera);
-      if (!raycaster.ray.intersectPlane(groundPlane, intersectPoint)) return;
-
-      if (modeRef.current === 'drag') {
-        useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
-      } else if (modeRef.current === 'rotate') {
-        const dx = intersectPoint.x - el.x;
-        const dz = intersectPoint.z - (-el.y);
-        const degrees = (Math.atan2(dx, dz) * 180) / Math.PI;
-        useStore.getState().rotateElement(elementId, degrees);
-      }
+      latestPointerRef.current = { x: e.clientX, y: e.clientY };
     };
 
     const onUp = () => {
       if (modeRef.current === 'idle') return;
       const wasDrag = modeRef.current === 'drag';
       modeRef.current = 'idle';
+      latestPointerRef.current = null;
       // Reset visuals
       if (wasDrag && pinMatRef.current) {
         pinMatRef.current.color.set('#4488ff');
@@ -409,17 +400,33 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [elementId, camera, raycaster, groundPlane, intersectPoint, pointerNDC, toNDC, gl]);
+  }, [elementId, gl]);
 
-  // Imperative frame updates — position pole, ring, direction indicator
+  // Single useFrame: applies drag/rotate from latest pointer AND updates visuals
   useFrame(() => {
     const el = useStore.getState().elements.find(e => e.id === elementId);
     if (!el) return;
-    // Pole group at element position
+
+    // Apply drag/rotate from latest pointer (throttled to frame rate)
+    const ptr = latestPointerRef.current;
+    if (ptr && modeRef.current !== 'idle') {
+      toNDC(ptr.x, ptr.y);
+      raycaster.setFromCamera(pointerNDC, camera);
+      if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+        if (modeRef.current === 'drag') {
+          useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
+        } else if (modeRef.current === 'rotate') {
+          const dx = intersectPoint.x - el.x;
+          const dz = intersectPoint.z - (-el.y);
+          const degrees = (Math.atan2(dx, dz) * 180) / Math.PI;
+          useStore.getState().rotateElement(elementId, degrees);
+        }
+      }
+    }
+
+    // Update visual positions
     if (poleRef.current) poleRef.current.position.set(el.x, 0, -el.y);
-    // Ring group at ground level
     if (ringGroupRef.current) ringGroupRef.current.position.set(el.x, 0.5, -el.y);
-    // Direction indicator on ring
     if (dirRef.current) {
       const rad = (el.rotation * Math.PI) / 180;
       dirRef.current.position.set(
@@ -747,6 +754,31 @@ function Scene() {
 export function FarmScene() {
   const cam = farmConfig.camera;
   const [ready, setReady] = useState(false);
+  const [contextLost, setContextLost] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Listen for WebGL context loss/restore
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onLost = (e: Event) => {
+      e.preventDefault(); // allows context restore
+      console.error('[FarmScene] WebGL context lost');
+      setContextLost(true);
+      // Exit edit mode to prevent further drag updates
+      useStore.getState().exitEditMode();
+    };
+    const onRestored = () => {
+      console.log('[FarmScene] WebGL context restored');
+      setContextLost(false);
+    };
+    canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+    };
+  }, [ready]); // re-attach after canvas is created
 
   return (
     <div className="w-full h-full relative">
@@ -758,12 +790,26 @@ export function FarmScene() {
           </div>
         </div>
       )}
+      {contextLost && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-earth-900/95 z-20 gap-4 p-6">
+          <div className="text-earth-300 text-sm text-center">3D view lost — GPU context reset</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-forest-600 hover:bg-forest-500 text-white text-sm rounded-lg"
+          >
+            Reload page
+          </button>
+        </div>
+      )}
       <CanvasErrorBoundary>
         <Canvas
           shadows
           camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position as [number, number, number] }}
-          gl={{ antialias: true }}
-          onCreated={() => setReady(true)}
+          gl={{ antialias: true, powerPreference: 'default' }}
+          onCreated={({ gl }) => {
+            canvasRef.current = gl.domElement;
+            setReady(true);
+          }}
         >
           <Scene />
         </Canvas>

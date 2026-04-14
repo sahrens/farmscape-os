@@ -13,5 +13,9 @@
 - [x] Fix: blank screen crash during drag in 3D edit mode
 - [x] Fix: drag still crashes (edit handles remount when parent ElementMesh re-renders)
 - [x] Redesign edit handles: bigger, positioned above elements (not on ground), not occluded by trees
-- [ ] Redesign handles: pinhead on stick above for drag, ring around base for rotate
-- [ ] Add error boundary + console logging to diagnose drag crash
+- [x] Redesign handles: pinhead on stick above for drag, ring around base for rotate
+- [x] Add error boundary + console logging to diagnose drag crash
+- [ ] Fix: bug report nub not visible (too subtle / missing)
+- [ ] Fix: blank screen crash during drag — likely WebGL context loss, not React error
+- [ ] Add webglcontextlost recovery to Canvas
+- [ ] Throttle drag updates to reduce GPU pressure
