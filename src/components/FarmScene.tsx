@@ -298,158 +298,145 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 }
 
 // ─── Edit mode handles ─────────────────────────────────────────────
-// Drag handle: reads element from store by ID, uses ref for drag state to avoid remount issues
-function DragHandle({ elementId }: { elementId: string }) {
+// Rendered at Scene level (not inside ElementMesh) to avoid remount during drag.
+// All position updates are imperative via refs + useFrame reading from store.
+
+function EditGizmo() {
+  const editingElementId = useStore(s => s.editingElementId);
+  if (!editingElementId) return null;
+  return <EditGizmoInner key={editingElementId} elementId={editingElementId} />;
+}
+
+function EditGizmoInner({ elementId }: { elementId: string }) {
   const { camera, raycaster, pointer } = useThree();
-  const draggingRef = useRef(false);
+  const dragRef = useRef(false);
+  const rotateRef = useRef(false);
   const groupRef = useRef<THREE.Group>(null);
-  const discMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const moveMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const rotateMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const dirIndicatorRef = useRef<THREE.Mesh>(null);
   const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersectPoint = useMemo(() => new THREE.Vector3(), []);
 
-  // Read element data directly from store in the frame loop — no prop dependency
+  // Get initial element for sizing
+  const initEl = useStore(s => s.elements.find(e => e.id === elementId));
+  const elHeight = initEl?.elevation || 20;
+  // Float above the element — gizmo sits at element top + offset
+  const gizmoY = elHeight + 10;
+  const moveRadius = 8; // big, easy-to-grab disc
+  const rotateInner = moveRadius + 3;
+  const rotateOuter = rotateInner + 4;
+
   useFrame(() => {
     const el = useStore.getState().elements.find(e => e.id === elementId);
     if (!el) return;
 
-    // Update group position to follow element
+    // Keep gizmo floating above element
     if (groupRef.current) {
-      groupRef.current.position.set(el.x, 0.5, -el.y);
+      groupRef.current.position.set(el.x, gizmoY, -el.y);
     }
 
-    if (!draggingRef.current) return;
-    raycaster.setFromCamera(pointer, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-      useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
-    }
-  });
-
-  const handlePointerDown = useCallback((e: any) => {
-    e.stopPropagation();
-    draggingRef.current = true;
-    if (discMatRef.current) discMatRef.current.opacity = 0.5;
-  }, []);
-
-  const handlePointerUp = useCallback(() => {
-    draggingRef.current = false;
-    if (discMatRef.current) discMatRef.current.opacity = 0.3;
-    useStore.getState().persistElement(elementId);
-  }, [elementId]);
-
-  // Compute initial radius from element
-  const el = useStore(s => s.elements.find(e => e.id === elementId));
-  const radius = Math.max(el?.width || 10, el?.height || 10, 8) * 0.5;
-
-  return (
-    <group ref={groupRef} position={el ? [el.x, 0.5, -el.y] : [0, 0, 0]}>
-      {/* Move disc */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-      >
-        <circleGeometry args={[radius, 32]} />
-        <meshBasicMaterial ref={discMatRef} color="#4488ff" transparent opacity={0.3} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Move icon: arrows */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-        <ringGeometry args={[radius * 0.15, radius * 0.25, 4]} />
-        <meshBasicMaterial color="#4488ff" transparent opacity={0.8} />
-      </mesh>
-      {/* Border ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-        <ringGeometry args={[radius - 0.5, radius, 32]} />
-        <meshBasicMaterial color="#4488ff" transparent opacity={0.6} />
-      </mesh>
-    </group>
-  );
-}
-
-// Rotation handle: reads element from store by ID, uses ref for drag state
-function RotateHandle({ elementId }: { elementId: string }) {
-  const { camera, raycaster, pointer } = useThree();
-  const draggingRef = useRef(false);
-  const groupRef = useRef<THREE.Group>(null);
-  const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const indicatorRef = useRef<THREE.Mesh>(null);
-  const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
-  const intersectPoint = useMemo(() => new THREE.Vector3(), []);
-
-  const el = useStore(s => s.elements.find(e => e.id === elementId));
-  const radius = Math.max(el?.width || 10, el?.height || 10, 8) * 0.6 + 3;
-
-  useFrame(() => {
-    const currentEl = useStore.getState().elements.find(e => e.id === elementId);
-    if (!currentEl) return;
-
-    // Update group position
-    if (groupRef.current) {
-      groupRef.current.position.set(currentEl.x, 1, -currentEl.y);
-    }
-    // Update direction indicator position
-    if (indicatorRef.current) {
-      const rad = (currentEl.rotation * Math.PI) / 180;
-      indicatorRef.current.position.set(
-        (radius + 1) * Math.sin(rad),
-        0.5,
-        (radius + 1) * Math.cos(rad),
+    // Update direction indicator
+    if (dirIndicatorRef.current) {
+      const rad = (el.rotation * Math.PI) / 180;
+      const r = (rotateInner + rotateOuter) / 2;
+      dirIndicatorRef.current.position.set(
+        r * Math.sin(rad),
+        0,
+        r * Math.cos(rad),
       );
     }
 
-    if (!draggingRef.current) return;
-    raycaster.setFromCamera(pointer, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-      const dx = intersectPoint.x - currentEl.x;
-      const dz = intersectPoint.z - (-currentEl.y);
-      const angle = Math.atan2(dx, dz);
-      const degrees = (angle * 180) / Math.PI;
-      useStore.getState().rotateElement(elementId, degrees);
+    // Drag move
+    if (dragRef.current) {
+      raycaster.setFromCamera(pointer, camera);
+      if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+        useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
+      }
+    }
+
+    // Drag rotate
+    if (rotateRef.current) {
+      raycaster.setFromCamera(pointer, camera);
+      if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+        const dx = intersectPoint.x - el.x;
+        const dz = intersectPoint.z - (-el.y);
+        const angle = Math.atan2(dx, dz);
+        const degrees = (angle * 180) / Math.PI;
+        useStore.getState().rotateElement(elementId, degrees);
+      }
     }
   });
 
-  const handlePointerDown = useCallback((e: any) => {
+  // Move handle events
+  const onMoveDown = useCallback((e: any) => {
     e.stopPropagation();
-    draggingRef.current = true;
-    if (ringMatRef.current) { ringMatRef.current.color.set('#ff8844'); ringMatRef.current.opacity = 0.7; }
+    dragRef.current = true;
+    if (moveMatRef.current) moveMatRef.current.opacity = 0.6;
   }, []);
+  const onMoveUp = useCallback(() => {
+    if (!dragRef.current) return;
+    dragRef.current = false;
+    if (moveMatRef.current) moveMatRef.current.opacity = 0.35;
+    useStore.getState().persistElement(elementId);
+  }, [elementId]);
 
-  const handlePointerUp = useCallback(() => {
-    draggingRef.current = false;
-    if (ringMatRef.current) { ringMatRef.current.color.set('#ff6622'); ringMatRef.current.opacity = 0.5; }
+  // Rotate handle events
+  const onRotateDown = useCallback((e: any) => {
+    e.stopPropagation();
+    rotateRef.current = true;
+    if (rotateMatRef.current) { rotateMatRef.current.color.set('#ff8844'); rotateMatRef.current.opacity = 0.7; }
+  }, []);
+  const onRotateUp = useCallback(() => {
+    if (!rotateRef.current) return;
+    rotateRef.current = false;
+    if (rotateMatRef.current) { rotateMatRef.current.color.set('#ff6622'); rotateMatRef.current.opacity = 0.5; }
     useStore.getState().persistElement(elementId);
   }, [elementId]);
 
   return (
-    <group ref={groupRef} position={el ? [el.x, 1, -el.y] : [0, 0, 0]}>
-      {/* Rotation ring */}
+    <group ref={groupRef} position={initEl ? [initEl.x, gizmoY, -initEl.y] : [0, gizmoY, 0]}>
+      {/* Vertical pole connecting gizmo to element */}
+      <mesh position={[0, -gizmoY / 2, 0]}>
+        <cylinderGeometry args={[0.3, 0.3, gizmoY, 8]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={0.4} />
+      </mesh>
+
+      {/* Move disc — large, easy to grab */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerDown={onMoveDown}
+        onPointerUp={onMoveUp}
+        onPointerCancel={onMoveUp}
+        onPointerLeave={onMoveUp}
       >
-        <ringGeometry args={[radius, radius + 2, 32]} />
-        <meshBasicMaterial ref={ringMatRef} color="#ff6622" transparent opacity={0.5} side={THREE.DoubleSide} />
+        <circleGeometry args={[moveRadius, 32]} />
+        <meshBasicMaterial ref={moveMatRef} color="#4488ff" transparent opacity={0.35} side={THREE.DoubleSide} depthTest={false} />
       </mesh>
-      {/* Direction indicator */}
-      <mesh ref={indicatorRef}>
-        <sphereGeometry args={[1.5, 8, 8]} />
-        <meshBasicMaterial color="#ff6622" />
+      {/* Move icon — cross arrows */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+        <ringGeometry args={[1, 2, 4]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={0.9} depthTest={false} />
+      </mesh>
+
+      {/* Rotate ring — outside the move disc */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={onRotateDown}
+        onPointerUp={onRotateUp}
+        onPointerCancel={onRotateUp}
+        onPointerLeave={onRotateUp}
+      >
+        <ringGeometry args={[rotateInner, rotateOuter, 32]} />
+        <meshBasicMaterial ref={rotateMatRef} color="#ff6622" transparent opacity={0.5} side={THREE.DoubleSide} depthTest={false} />
+      </mesh>
+
+      {/* Direction indicator sphere */}
+      <mesh ref={dirIndicatorRef}>
+        <sphereGeometry args={[2.5, 8, 8]} />
+        <meshBasicMaterial color="#ff6622" depthTest={false} />
       </mesh>
     </group>
-  );
-}
-
-// Edit handles wrapper
-function EditHandles({ elementId }: { elementId: string }) {
-  return (
-    <>
-      <DragHandle elementId={elementId} />
-      <RotateHandle elementId={elementId} />
-    </>
   );
 }
 
@@ -620,7 +607,7 @@ function ElementMesh({ el }: { el: FarmElement }) {
             return null;
         }
       })()}
-      {isEditing && <EditHandles elementId={el.id} />}
+      {/* Edit handles rendered at Scene level, not here */}
     </>
   );
 }
@@ -632,6 +619,7 @@ function Scene() {
   const statusFilter = useStore(s => s.statusFilter);
   const selectElement = useStore(s => s.selectElement);
   const editMode = useStore(s => s.editMode);
+  const editingElementId = useStore(s => s.editingElementId);
   const exitEditMode = useStore(s => s.exitEditMode);
 
   const filtered = useMemo(() => {
@@ -688,6 +676,9 @@ function Scene() {
       {filtered.map(el => (
         <ElementMesh key={el.id} el={el} />
       ))}
+
+      {/* Edit gizmo — rendered at scene level, decoupled from element re-renders */}
+      {editMode && <EditGizmo />}
 
       {/* Click on ground to deselect / exit edit mode */}
       <mesh
