@@ -363,7 +363,7 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
   // Snapshot element data on mount (read once, never again during drag)
   const initEl = useStore.getState().elements.find(e => e.id === elementId);
   const elHeight = initEl?.elevation || 20;
-  const pinHeight = elHeight + 25;
+  const pinHeight = elHeight + 40;
   const pinRadius = 5;
   const ringRadius = Math.max(initEl?.width || 10, initEl?.height || 10, 10) * 0.5 + 5;
   const ringThickness = 3;
@@ -373,6 +373,8 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
   const localRotRef = useRef(initEl?.rotation || 0);
   // The element group's Y position (varies by type)
   const groupYRef = useRef(0);
+  // Drag offset: difference between element position and initial ground hit
+  const dragOffsetRef = useRef({ x: 0, z: 0 });
 
   // Snapshot the element group's initial Y from the registry
   useEffect(() => {
@@ -444,8 +446,9 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
       raycaster.setFromCamera(pointerNDC, camera);
       if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
         if (modeRef.current === 'drag') {
-          const newX = intersectPoint.x;
-          const newY = -intersectPoint.z; // Three.js z → farm y
+          const off = dragOffsetRef.current;
+          const newX = intersectPoint.x + off.x;
+          const newY = -(intersectPoint.z + off.z); // Three.js z → farm y
           localPosRef.current = { x: newX, y: newY };
 
           // Move the element's actual group imperatively
@@ -496,9 +499,23 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
 
   const onPinDown = useCallback((e: any) => {
     e.stopPropagation();
+    // Capture offset: raycast current pointer to ground, compute delta from element pos
+    const rect = gl.domElement.getBoundingClientRect();
+    const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    const tmpNDC = new THREE.Vector2(ndcX, ndcY);
+    const tmpRaycaster = new THREE.Raycaster();
+    tmpRaycaster.setFromCamera(tmpNDC, camera);
+    const tmpHit = new THREE.Vector3();
+    if (tmpRaycaster.ray.intersectPlane(groundPlane, tmpHit)) {
+      const pos = localPosRef.current;
+      dragOffsetRef.current = { x: pos.x - tmpHit.x, z: (-pos.y) - tmpHit.z };
+    } else {
+      dragOffsetRef.current = { x: 0, z: 0 };
+    }
     modeRef.current = 'drag';
     if (pinMatRef.current) { pinMatRef.current.color.set('#66aaff'); pinMatRef.current.opacity = 1; }
-  }, []);
+  }, [gl, camera, groundPlane]);
 
   const onRingDown = useCallback((e: any) => {
     e.stopPropagation();
