@@ -86,8 +86,28 @@ async function sendOtpEmail(email: string, code: string, farmName: string, siteU
       body: JSON.stringify({
         to: [email],
         subject: `${farmName} — Tap to log in`,
-        text: `🌿 ${farmName}\n\nTap this link to log in:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Farmscape-OS`,
-        headers: { 'X-Entity-Ref-ID': `otp-${Date.now()}` },
+        text: `${farmName}\n\nTap this link to log in:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Farmscape-OS`,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+  <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;">
+    <div style="background:#2d5016;padding:20px 24px;">
+      <h1 style="color:white;margin:0;font-size:18px;">🌿 ${farmName}</h1>
+    </div>
+    <div style="padding:24px;">
+      <p style="color:#333;font-size:15px;line-height:1.5;margin:0 0 20px;">Tap the button below to log in:</p>
+      <a href="${magicLink}" style="display:inline-block;background:#2d5016;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Log in to ${farmName}</a>
+      <p style="color:#999;font-size:13px;line-height:1.5;margin:20px 0 0;">Or enter this code manually:</p>
+      <p style="font-family:monospace;font-size:28px;font-weight:700;letter-spacing:6px;color:#2d5016;margin:8px 0 0;">${code}</p>
+      <p style="color:#999;font-size:12px;margin:20px 0 0;">Expires in 10 minutes.</p>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;border-top:1px solid #e5e5e5;">
+      <p style="color:#aaa;font-size:11px;margin:0;">Farmscape-OS</p>
+    </div>
+  </div>
+</div>`,
+        headers: {
+          'From': 'Farmscape-OS - Kahiliholo Farm <atlas-nav@agentmail.to>',
+          'X-Entity-Ref-ID': `otp-${Date.now()}`,
+        },
       }),
     });
     return res.ok;
@@ -115,8 +135,26 @@ async function sendInviteEmail(
       body: JSON.stringify({
         to: [email],
         subject: `${inviterName} invited you to ${farmName}`,
-        text: `🌿 ${farmName}\n\n${inviterName} has invited you as ${roleLabel}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Farmscape-OS`,
-        headers: { 'X-Entity-Ref-ID': `invite-${Date.now()}` },
+        text: `${farmName}\n\n${inviterName} has invited you as ${roleLabel}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Farmscape-OS`,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+  <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;">
+    <div style="background:#2d5016;padding:20px 24px;">
+      <h1 style="color:white;margin:0;font-size:18px;">🌿 ${farmName}</h1>
+    </div>
+    <div style="padding:24px;">
+      <p style="color:#333;font-size:15px;line-height:1.5;margin:0 0 8px;"><strong>${inviterName}</strong> has invited you as ${roleLabel}.</p>
+      <p style="color:#555;font-size:14px;line-height:1.5;margin:0 0 20px;">Visit the link below and enter your email to log in:</p>
+      <a href="${siteUrl}" style="display:inline-block;background:#2d5016;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Open ${farmName}</a>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;border-top:1px solid #e5e5e5;">
+      <p style="color:#aaa;font-size:11px;margin:0;">Farmscape-OS</p>
+    </div>
+  </div>
+</div>`,
+        headers: {
+          'From': 'Farmscape-OS - Kahiliholo Farm <atlas-nav@agentmail.to>',
+          'X-Entity-Ref-ID': `invite-${Date.now()}`,
+        },
       }),
     });
     return res.ok;
@@ -966,7 +1004,11 @@ export default {
             to: ['spencer.ahrens@gmail.com'],
             subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
             text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
-            headers: { 'X-Entity-Ref-ID': `bug-${id}` },
+            html: emailHtml,
+            headers: {
+              'From': 'Farmscape-OS - Kahiliholo Farm <atlas-nav@agentmail.to>',
+              'X-Entity-Ref-ID': `bug-${id}`,
+            },
           }),
         });
       } catch {
