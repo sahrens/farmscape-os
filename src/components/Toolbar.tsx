@@ -37,7 +37,7 @@ export function NavBar() {
     }`;
 
   return (
-    <div className="bg-earth-800 border-b border-earth-700/50 shrink-0 z-50 relative" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+    <div className="bg-earth-800 border-b border-earth-700/50 shrink-0 z-50 relative">
       <div className="flex items-start justify-between px-3 py-2 gap-2">
         {/* Left: farm name */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">

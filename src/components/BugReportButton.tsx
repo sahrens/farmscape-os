@@ -28,7 +28,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
       const canvas = await html2canvas(document.body, {
         useCORS: true,
         logging: false,
-        scale: 0.5, // half resolution for smaller payload
+        scale: 0.5,
         ignoreElements: (el) => el.id === 'bug-report-modal',
       });
       const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
@@ -43,7 +43,6 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
     setSubmitted(false);
     setError(null);
     setGithubUrl(null);
-    // Auto-capture screenshot when opening
     await captureScreenshot();
   }, [captureScreenshot]);
 
@@ -85,7 +84,6 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
       };
       reader.readAsDataURL(file);
     }
-    // Reset input so same file can be re-selected
     e.target.value = '';
   };
 
@@ -120,13 +118,12 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
         viewport,
       });
 
-      // Upload attachments separately
       if (result.id && attachments.length > 0) {
         for (const att of attachments) {
           try {
             await bugReports.upload(att.dataUrl, att.filename, att.mimeType, result.id);
           } catch {
-            // Non-critical — report was already saved
+            // Non-critical
           }
         }
       }
@@ -142,11 +139,11 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
 
   return (
     <>
-      {/* Floating bug nub */}
+      {/* Subtle bug nub — small, muted, bottom-right. Uses CSS var for safe area. */}
       <button
         onClick={handleOpen}
-        className="fixed bottom-4 right-4 z-50 w-10 h-10 rounded-full bg-red-600/80 text-white flex items-center justify-center shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="fixed z-50 w-7 h-7 rounded-full bg-earth-700/60 text-earth-500 hover:bg-earth-600/80 hover:text-earth-300 flex items-center justify-center backdrop-blur-sm active:scale-90 transition-all text-sm opacity-50 hover:opacity-100"
+        style={{ bottom: 'calc(0.75rem + var(--sab, 0px))', right: '0.75rem' }}
         aria-label="Report a bug"
       >
         🪲
@@ -163,13 +160,12 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
             {/* Header */}
             <div className="sticky top-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                {submitted ? '✅ Bug Reported' : '🪲 Report a Bug'}
+                {submitted ? 'Bug Reported' : 'Report a Bug'}
               </h2>
               <button onClick={handleClose} className="text-zinc-400 hover:text-zinc-600 text-xl leading-none">✕</button>
             </div>
 
             {submitted ? (
-              /* Success state */
               <div className="p-4 space-y-4">
                 <p className="text-zinc-700 dark:text-zinc-300">
                   Thanks for reporting! Your bug has been logged.
@@ -181,7 +177,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
                     rel="noopener noreferrer"
                     className="inline-block text-blue-600 dark:text-blue-400 underline text-sm"
                   >
-                    View GitHub issue →
+                    View GitHub issue
                   </a>
                 )}
                 <button
@@ -192,7 +188,6 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
                 </button>
               </div>
             ) : (
-              /* Form */
               <div className="p-4 space-y-4">
                 {/* Title */}
                 <div>
@@ -333,7 +328,7 @@ export function BugReportButton({ consoleLogs }: BugReportButtonProps) {
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || !title.trim()}
-                  className="w-full py-2.5 bg-red-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 bg-earth-700 hover:bg-earth-600 text-earth-100 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {submitting ? 'Submitting...' : 'Submit Bug Report'}
                 </button>
