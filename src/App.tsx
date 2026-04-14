@@ -28,6 +28,10 @@ function Dashboard({ visible }: { visible: boolean }) {
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
   const sheetHeight = useStore(s => s.sheetHeight);
   const selectElement = useStore(s => s.selectElement);
+  const editMode = useStore(s => s.editMode);
+  const editingElementId = useStore(s => s.editingElementId);
+  const exitEditMode = useStore(s => s.exitEditMode);
+  const editingElement = elements.find(e => e.id === editingElementId);
 
   useEffect(() => {
     fetchElements();
@@ -74,10 +78,25 @@ function Dashboard({ visible }: { visible: boolean }) {
       >
         ☰
       </button>
-      {/* Element count badge */}
-      <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700 z-10">
-        {elements.length} elements
-      </div>
+      {/* Element count badge / Edit mode indicator */}
+      {editMode ? (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 bg-blue-900/90 backdrop-blur text-blue-100 text-sm px-4 py-2.5 rounded-xl border border-blue-700 shadow-lg">
+          <span className="font-medium">
+            Editing: {editingElement?.name || 'element'}
+          </span>
+          <span className="text-blue-300 text-xs">Drag to move · Ring to rotate</span>
+          <button
+            onClick={exitEditMode}
+            className="ml-2 px-3 py-1 bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium rounded-lg active:scale-95 transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="absolute bottom-4 right-4 bg-earth-800/80 backdrop-blur text-earth-400 text-xs px-3 py-1.5 rounded-lg border border-earth-700 z-10">
+          {elements.length} elements
+        </div>
+      )}
       {/* Sidebar — handles its own mobile/desktop layout */}
       <Sidebar />
     </div>

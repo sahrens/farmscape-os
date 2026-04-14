@@ -101,7 +101,7 @@ function OverlayLines() {
   );
 }
 
-// Gable roof geometry — ridge runs along the longer axis of the building
+// Gable roof geometry
 function GableRoof({ w, d, roofHeight, color }: { w: number; d: number; roofHeight: number; color: string }) {
   const geo = useMemo(() => {
     const hw = w / 2;
@@ -297,14 +297,146 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
   );
 }
 
-// Camera controller with animated fly-to and preset bookmarks
+// ─── Edit mode handles ─────────────────────────────────────────────
+// Drag handle: a flat disc on the ground that can be dragged to move the element
+function DragHandle({ el }: { el: FarmElement }) {
+  const { camera, raycaster, pointer } = useThree();
+  const moveElement = useStore(s => s.moveElement);
+  const persistElement = useStore(s => s.persistElement);
+  const [dragging, setDragging] = useState(false);
+  const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const intersectPoint = useMemo(() => new THREE.Vector3(), []);
+
+  // Use a frame loop to update position while dragging
+  useFrame(() => {
+    if (!dragging) return;
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+      // intersectPoint.x = local x, intersectPoint.z = -local y
+      moveElement(el.id, intersectPoint.x, -intersectPoint.z);
+    }
+  });
+
+  const handlePointerDown = useCallback((e: any) => {
+    e.stopPropagation();
+    (e.target as HTMLElement)?.setPointerCapture?.(e.nativeEvent?.pointerId);
+    setDragging(true);
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    setDragging(false);
+    persistElement(el.id);
+  }, [el.id, persistElement]);
+
+  const radius = Math.max(el.width || 10, el.height || 10, 8) * 0.5;
+
+  return (
+    <group position={[el.x, 0.5, -el.y]}>
+      {/* Move disc */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+      >
+        <circleGeometry args={[radius, 32]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={dragging ? 0.5 : 0.3} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Move icon: arrows */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+        <ringGeometry args={[radius * 0.15, radius * 0.25, 4]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={0.8} />
+      </mesh>
+      {/* Border ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+        <ringGeometry args={[radius - 0.5, radius, 32]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+// Rotation handle: an arc at the edge that can be dragged to rotate
+function RotateHandle({ el }: { el: FarmElement }) {
+  const { camera, raycaster, pointer } = useThree();
+  const rotateElement = useStore(s => s.rotateElement);
+  const persistElement = useStore(s => s.persistElement);
+  const [dragging, setDragging] = useState(false);
+  const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const intersectPoint = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(() => {
+    if (!dragging) return;
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+      // Compute angle from element center to pointer
+      const dx = intersectPoint.x - el.x;
+      const dz = intersectPoint.z - (-el.y);
+      const angle = Math.atan2(dx, dz); // radians, 0 = north
+      const degrees = (angle * 180) / Math.PI;
+      rotateElement(el.id, degrees);
+    }
+  });
+
+  const handlePointerDown = useCallback((e: any) => {
+    e.stopPropagation();
+    (e.target as HTMLElement)?.setPointerCapture?.(e.nativeEvent?.pointerId);
+    setDragging(true);
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    setDragging(false);
+    persistElement(el.id);
+  }, [el.id, persistElement]);
+
+  const radius = Math.max(el.width || 10, el.height || 10, 8) * 0.6 + 3;
+
+  return (
+    <group position={[el.x, 1, -el.y]}>
+      {/* Rotation ring */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+      >
+        <ringGeometry args={[radius, radius + 2, 32]} />
+        <meshBasicMaterial color={dragging ? '#ff8844' : '#ff6622'} transparent opacity={dragging ? 0.7 : 0.5} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Direction indicator — small sphere at current rotation angle */}
+      <mesh
+        position={[
+          (radius + 1) * Math.sin((el.rotation * Math.PI) / 180),
+          0.5,
+          (radius + 1) * Math.cos((el.rotation * Math.PI) / 180),
+        ]}
+      >
+        <sphereGeometry args={[1.5, 8, 8]} />
+        <meshBasicMaterial color="#ff6622" />
+      </mesh>
+    </group>
+  );
+}
+
+// Edit handles wrapper — shows drag + rotate for the editing element
+function EditHandles({ el }: { el: FarmElement }) {
+  return (
+    <>
+      <DragHandle el={el} />
+      <RotateHandle el={el} />
+    </>
+  );
+}
+
+// ─── Camera controller ─────────────────────────────────────────────
 function CameraController() {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const cameraTarget = useStore(s => s.cameraTarget);
   const clearCameraTarget = useStore(s => s.clearCameraTarget);
+  const focusTarget = useStore(s => s.focusTarget);
+  const clearFocusTarget = useStore(s => s.clearFocusTarget);
+  const editMode = useStore(s => s.editMode);
 
-  // Animation state
+  // Animation state for flyTo
   const animRef = useRef({
     animating: false,
     startPos: new THREE.Vector3(),
@@ -314,9 +446,17 @@ function CameraController() {
     progress: 0,
   });
 
-  const [tx, ty, tz] = farmConfig.camera.target;
+  // Animation state for focusOn (orbit center only)
+  const focusAnimRef = useRef({
+    animating: false,
+    startPos: new THREE.Vector3(),
+    endPos: new THREE.Vector3(),
+    startTarget: new THREE.Vector3(),
+    endTarget: new THREE.Vector3(),
+    progress: 0,
+  });
 
-  // Track whether controls have been initialized
+  const [tx, ty, tz] = farmConfig.camera.target;
   const initRef = useRef(false);
 
   // Initialize camera position
@@ -327,7 +467,7 @@ function CameraController() {
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
   }, [camera]);
 
-  // Start animation when cameraTarget changes
+  // Start flyTo animation
   useEffect(() => {
     if (!cameraTarget || !controlsRef.current) return;
     const anim = animRef.current;
@@ -339,12 +479,30 @@ function CameraController() {
     anim.animating = true;
   }, [cameraTarget, camera]);
 
+  // Start focusOn animation — only moves orbit center, camera follows to maintain offset
+  useEffect(() => {
+    if (!focusTarget || !controlsRef.current) return;
+    const anim = focusAnimRef.current;
+    const controls = controlsRef.current;
+
+    // Current offset from target to camera
+    const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+
+    anim.startPos.copy(camera.position);
+    anim.startTarget.copy(controls.target);
+    anim.endTarget.set(...focusTarget);
+    // Camera end = new target + same offset (preserves zoom, bearing, pitch)
+    anim.endPos.copy(anim.endTarget).add(offset);
+    anim.progress = 0;
+    anim.animating = true;
+  }, [focusTarget, camera]);
+
   useFrame((_, delta) => {
     if (!controlsRef.current) return;
 
+    // flyTo animation
     const anim = animRef.current;
     if (anim.animating) {
-      // Smooth ease-in-out animation
       anim.progress = Math.min(1, anim.progress + delta * 1.5);
       const t = anim.progress < 0.5
         ? 2 * anim.progress * anim.progress
@@ -361,6 +519,25 @@ function CameraController() {
       }
     }
 
+    // focusOn animation (orbit center only, preserves offset)
+    const focus = focusAnimRef.current;
+    if (focus.animating) {
+      focus.progress = Math.min(1, focus.progress + delta * 2);
+      const t = focus.progress < 0.5
+        ? 2 * focus.progress * focus.progress
+        : 1 - Math.pow(-2 * focus.progress + 2, 2) / 2;
+
+      camera.position.lerpVectors(focus.startPos, focus.endPos, t);
+      controlsRef.current.target.lerpVectors(focus.startTarget, focus.endTarget, t);
+
+      if (focus.progress >= 1) {
+        focus.animating = false;
+        camera.position.copy(focus.endPos);
+        controlsRef.current.target.copy(focus.endTarget);
+        clearFocusTarget();
+      }
+    }
+
     // Set initial target once after controls mount
     if (!initRef.current) {
       controlsRef.current.target.set(tx, ty, tz);
@@ -368,28 +545,57 @@ function CameraController() {
     }
   });
 
-  return <OrbitControls ref={controlsRef} maxPolarAngle={Math.PI / 2.1} minDistance={20} maxDistance={1200} />;
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      maxPolarAngle={Math.PI / 2.1}
+      minDistance={20}
+      maxDistance={1200}
+      enabled={!editMode || !useStore.getState().editingElementId}
+      enableRotate={!editMode}
+    />
+  );
 }
 
 // Element renderer
 function ElementMesh({ el }: { el: FarmElement }) {
   const selectedId = useStore(s => s.selectedId);
   const selectElement = useStore(s => s.selectElement);
+  const editMode = useStore(s => s.editMode);
+  const editingElementId = useStore(s => s.editingElementId);
+  const enterEditMode = useStore(s => s.enterEditMode);
   const selected = selectedId === el.id;
-  const onClick = useCallback(() => selectElement(el.id), [el.id, selectElement]);
 
-  switch (el.type) {
-    case 'structure':
-      return <Structure el={el} selected={selected} onClick={onClick} />;
-    case 'tree':
-      return <Tree el={el} selected={selected} onClick={onClick} />;
-    case 'zone':
-      return <Zone el={el} selected={selected} onClick={onClick} />;
-    case 'infrastructure':
-      return <Infrastructure el={el} selected={selected} onClick={onClick} />;
-    default:
-      return null;
-  }
+  const onClick = useCallback(() => {
+    if (editMode) {
+      // In edit mode, clicking an element switches editing to it
+      enterEditMode(el.id);
+    } else {
+      selectElement(el.id);
+    }
+  }, [el.id, editMode, selectElement, enterEditMode]);
+
+  const isEditing = editMode && editingElementId === el.id;
+
+  return (
+    <>
+      {(() => {
+        switch (el.type) {
+          case 'structure':
+            return <Structure el={el} selected={selected || isEditing} onClick={onClick} />;
+          case 'tree':
+            return <Tree el={el} selected={selected || isEditing} onClick={onClick} />;
+          case 'zone':
+            return <Zone el={el} selected={selected || isEditing} onClick={onClick} />;
+          case 'infrastructure':
+            return <Infrastructure el={el} selected={selected || isEditing} onClick={onClick} />;
+          default:
+            return null;
+        }
+      })()}
+      {isEditing && <EditHandles el={el} />}
+    </>
+  );
 }
 
 // Main scene
@@ -398,6 +604,8 @@ function Scene() {
   const typeFilter = useStore(s => s.typeFilter);
   const statusFilter = useStore(s => s.statusFilter);
   const selectElement = useStore(s => s.selectElement);
+  const editMode = useStore(s => s.editMode);
+  const exitEditMode = useStore(s => s.exitEditMode);
 
   const filtered = useMemo(() => {
     return elements.filter(el => {
@@ -409,6 +617,14 @@ function Scene() {
 
   const [gx, gz] = farmConfig.ground.center;
   const [gw, gd] = farmConfig.ground.size;
+
+  const handleGroundClick = useCallback(() => {
+    if (editMode) {
+      exitEditMode();
+    } else {
+      selectElement(null);
+    }
+  }, [editMode, exitEditMode, selectElement]);
 
   return (
     <>
@@ -446,11 +662,11 @@ function Scene() {
         <ElementMesh key={el.id} el={el} />
       ))}
 
-      {/* Click on ground to deselect */}
+      {/* Click on ground to deselect / exit edit mode */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[gx, -0.3, gz]}
-        onClick={() => selectElement(null)}
+        onClick={handleGroundClick}
         visible={false}
       >
         <planeGeometry args={[gw, gd]} />
