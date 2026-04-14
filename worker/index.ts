@@ -84,21 +84,10 @@ async function sendOtpEmail(email: string, code: string, farmName: string, siteU
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from_name: `Farmscape-OS - ${farmName}`,
         to: [email],
         subject: `${farmName} — Tap to log in`,
-        body_text: `Hi there!\n\nTap this link to log in to ${farmName}:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Eva & Spencer`,
-        body_html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
-  <h2 style="color: #2d5016; margin: 0 0 8px;">🌿 ${farmName}</h2>
-  <p style="color: #666; margin: 0 0 24px;">Tap the button to log in:</p>
-  <a href="${magicLink}" style="display: inline-block; background: #2d5016; color: white; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-weight: 600; font-size: 18px; margin: 0 0 24px;">Log in to ${farmName}</a>
-  <p style="color: #999; font-size: 14px; margin: 0 0 8px;">Or enter this code manually:</p>
-  <div style="background: #f4f7f0; border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; margin: 0 0 24px;">
-    <span style="font-size: 24px; font-weight: 700; letter-spacing: 6px; color: #2d5016; font-family: monospace;">${code}</span>
-  </div>
-  <p style="color: #999; font-size: 14px; margin: 0;">Expires in 10 minutes. If you didn't request this, just ignore it.</p>
-  <p style="color: #999; font-size: 14px; margin: 16px 0 0;">— Eva & Spencer</p>
-</div>`,
+        text: `🌿 ${farmName}\n\nTap this link to log in:\n\n  ${magicLink}\n\nOr enter this code manually: ${code}\n\nExpires in 10 minutes.\n\n— Farmscape-OS`,
+        headers: { 'X-Entity-Ref-ID': `otp-${Date.now()}` },
       }),
     });
     return res.ok;
@@ -124,17 +113,10 @@ async function sendInviteEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from_name: `Farmscape-OS - ${farmName}`,
         to: [email],
         subject: `${inviterName} invited you to ${farmName}`,
-        body_text: `Hi!\n\n${inviterName} has invited you as ${roleLabel} to ${farmName}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Eva & Spencer`,
-        body_html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
-  <h2 style="color: #2d5016; margin: 0 0 8px;">🌿 ${farmName}</h2>
-  <p style="color: #333; margin: 0 0 16px;">${inviterName} has invited you as <strong>${roleLabel}</strong>.</p>
-  <a href="${siteUrl}" style="display: inline-block; background: #2d5016; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">Open ${farmName}</a>
-  <p style="color: #999; font-size: 14px; margin: 24px 0 0;">Enter your email on the login page to get started.</p>
-  <p style="color: #999; font-size: 14px; margin: 16px 0 0;">— Eva & Spencer</p>
-</div>`,
+        text: `🌿 ${farmName}\n\n${inviterName} has invited you as ${roleLabel}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Farmscape-OS`,
+        headers: { 'X-Entity-Ref-ID': `invite-${Date.now()}` },
       }),
     });
     return res.ok;
@@ -981,11 +963,10 @@ export default {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from_name: 'Farmscape-OS - Kahiliholo Farm',
             to: ['spencer.ahrens@gmail.com'],
             subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
-            body_html: emailHtml,
-            body_text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
+            text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
+            headers: { 'X-Entity-Ref-ID': `bug-${id}` },
           }),
         });
       } catch {

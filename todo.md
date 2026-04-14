@@ -20,6 +20,8 @@
 - [x] Add webglcontextlost recovery to Canvas
 - [x] Throttle drag updates to reduce GPU pressure
 - [x] Fix: rewrite drag to be purely imperative Three.js (no store updates during drag, only on pointer up)
-- [ ] Fix drag offset jump — pin should track touch point exactly, element stays under pin
-- [ ] Make drag pin taller
-- [ ] Set up login/invite emails via Resend with sender name "Farmscape-OS - Kahiliholo Farm"
+- [x] Fix drag offset jump — pin should track touch point exactly, element stays under pin
+- [x] Make drag pin taller
+- [x] Switch login/invite/bug-report emails from Resend to AgentMail with sender name "Farmscape-OS - Kahiliholo Farm"
+- [x] Fix AgentMail API usage — already using body_text correctly
+- [x] Update README and documentation files for context survival across compaction
