@@ -169,41 +169,23 @@ function ActivityForm() {
 function ElementDetail({ el }: { el: FarmElement }) {
   const activities = useStore(s => s.activities);
   const activitiesLoading = useStore(s => s.activitiesLoading);
-  const flyTo = useStore(s => s.flyTo);
+  const focusOn = useStore(s => s.focusOn);
+  const enterEditMode = useStore(s => s.enterEditMode);
   // Clear selection without closing sidebar — returns to element list
   const clearSelection = () => useStore.setState({ selectedId: null });
   const u = farmConfig.unitLabel;
 
-  const handleFlyTo = () => {
-    // Preserve current bearing/yaw — only change distance and pitch.
-    // We read the current camera position from the Three.js canvas to
-    // compute the current horizontal angle, then position the camera at
-    // that same angle around the element.
+  const handleFocus = () => {
+    // Only move orbit center to element — preserves zoom, bearing, pitch
     const elHeight = el.elevation || 10;
-    const span = Math.max(el.width || 30, el.height || 30, 60);
-    const dist = span * 2.2;
-    const targetPos: [number, number, number] = [el.x, elHeight * 0.3, -el.y];
+    focusOn([el.x, elHeight * 0.3, -el.y]);
+  };
 
-    // Try to read current camera bearing from the Three.js canvas
-    const canvas = document.querySelector('canvas');
-    let bearing = Math.PI / 4; // default 45° if we can't read it
-    if (canvas && (canvas as any).__r3f) {
-      const cam = (canvas as any).__r3f.store?.getState()?.camera;
-      if (cam) {
-        // Horizontal angle from current camera to element target
-        const dx = cam.position.x - targetPos[0];
-        const dz = cam.position.z - targetPos[2];
-        bearing = Math.atan2(dx, dz);
-      }
-    }
-
-    // Fixed pitch angle (~30° above horizon)
-    const pitch = Math.PI / 6;
-    const camX = targetPos[0] + dist * Math.sin(bearing) * Math.cos(pitch);
-    const camY = targetPos[1] + dist * Math.sin(pitch);
-    const camZ = targetPos[2] + dist * Math.cos(bearing) * Math.cos(pitch);
-
-    flyTo([camX, camY, camZ], targetPos);
+  const handleEditIn3D = () => {
+    enterEditMode(el.id);
+    // Focus on the element
+    const elHeight = el.elevation || 10;
+    focusOn([el.x, elHeight * 0.3, -el.y]);
   };
 
   return (
@@ -212,11 +194,18 @@ function ElementDetail({ el }: { el: FarmElement }) {
         <h2 className="text-lg font-bold text-earth-50">{el.name}</h2>
         <div className="flex items-center gap-1">
           <button
-            onClick={handleFlyTo}
+            onClick={handleFocus}
             className="text-earth-400 hover:text-forest-300 text-sm px-2 py-1 rounded bg-earth-700 hover:bg-earth-600 active:scale-95 transition-colors"
-            title="Fly camera to element"
+            title="Focus camera on element"
           >
             📍 Focus
+          </button>
+          <button
+            onClick={handleEditIn3D}
+            className="text-earth-400 hover:text-blue-300 text-sm px-2 py-1 rounded bg-earth-700 hover:bg-earth-600 active:scale-95 transition-colors"
+            title="Edit position and rotation in 3D"
+          >
+            ✏️ Edit
           </button>
           <button
             onClick={clearSelection}
