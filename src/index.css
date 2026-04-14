@@ -34,6 +34,18 @@
   --color-sunset-400: oklch(0.72 0.12 30);
 }
 
+/* ── Safe area insets ──────────────────────────────────────────────────────
+   Centralized here so no individual component needs to think about them.
+   The .app-shell class applies these as padding on the outermost flex column,
+   pushing all content (navbar, routes, sheets) inside the safe zone.
+   Floating elements (bug button, etc.) use the CSS vars directly for positioning. */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
 html {
   height: 100dvh;
   height: 100vh; /* fallback */
@@ -59,6 +71,14 @@ body {
 #root {
   height: 100%;
   overflow: hidden;
+}
+
+/* App shell — the single place that handles all safe area insets */
+.app-shell {
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
 }
 
 ::-webkit-scrollbar {
