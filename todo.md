@@ -10,4 +10,6 @@
 - [x] Fix focus: only change camera orbit center, preserve overhead/zoom/bearing/pitch
 - [x] Fieldwork: "Add Element" form with type, subtype, name, status, GPS
 - [x] Fieldwork: "Edit in 3D" button on element cards → jumps to map in edit mode
-- [ ] Fix: blank screen crash during drag in 3D edit mode
+- [x] Fix: blank screen crash during drag in 3D edit mode
+- [ ] Fix: drag still crashes (edit handles remount when parent ElementMesh re-renders)
+- [ ] Redesign edit handles: bigger, positioned above elements (not on ground), not occluded by trees
