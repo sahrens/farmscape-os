@@ -949,7 +949,7 @@ export default {
         const emailHtml = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
   <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;">
     <div style="background:#2d5016;padding:20px 24px;">
-      <h1 style="color:white;margin:0;font-size:18px;">🐛 Bug Report — ${body.title || 'Untitled'}</h1>
+      <h1 style="color:white;margin:0;font-size:18px;">🪲 Bug Report — ${body.title || 'Untitled'}</h1>
     </div>
     <div style="padding:24px;">
       <table style="width:100%;border-collapse:collapse;margin:0 0 16px;">
@@ -983,7 +983,7 @@ export default {
           body: JSON.stringify({
             from: 'Kahiliholo Farm <onboarding@resend.dev>',
             to: ['spencer.ahrens@gmail.com'],
-            subject: `🐛 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
+            subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
             html: emailHtml,
             text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
           }),
