@@ -11,5 +11,7 @@
 - [x] Fieldwork: "Add Element" form with type, subtype, name, status, GPS
 - [x] Fieldwork: "Edit in 3D" button on element cards → jumps to map in edit mode
 - [x] Fix: blank screen crash during drag in 3D edit mode
-- [ ] Fix: drag still crashes (edit handles remount when parent ElementMesh re-renders)
-- [ ] Redesign edit handles: bigger, positioned above elements (not on ground), not occluded by trees
+- [x] Fix: drag still crashes (edit handles remount when parent ElementMesh re-renders)
+- [x] Redesign edit handles: bigger, positioned above elements (not on ground), not occluded by trees
+- [ ] Redesign handles: pinhead on stick above for drag, ring around base for rotate
+- [ ] Add error boundary + console logging to diagnose drag crash
