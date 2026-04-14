@@ -84,7 +84,7 @@ function Dashboard({ visible }: { visible: boolean }) {
           <span className="font-medium">
             Editing: {editingElement?.name || 'element'}
           </span>
-          <span className="text-blue-300 text-xs">Drag to move · Ring to rotate</span>
+          <span className="text-blue-300 text-xs">Pin = move · Ring = rotate</span>
           <button
             onClick={exitEditMode}
             className="ml-2 px-3 py-1 bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium rounded-lg active:scale-95 transition-colors"

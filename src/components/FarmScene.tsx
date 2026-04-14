@@ -1,10 +1,39 @@
-import { useRef, useState, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useState, useMemo, useCallback, useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
+
+// ─── Error boundary ───────────────────────────────────────────────
+interface ErrorBoundaryState { hasError: boolean; error: string }
+class CanvasErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[FarmScene crash]', error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full bg-earth-900 gap-4 p-6">
+          <div className="text-earth-400 text-sm text-center">3D view encountered an error</div>
+          <button
+            onClick={() => this.setState({ hasError: false, error: '' })}
+            className="px-4 py-2 bg-forest-600 hover:bg-forest-500 text-white text-sm rounded-lg"
+          >
+            Tap to reload
+          </button>
+          <div className="text-earth-600 text-xs max-w-xs text-center">{this.state.error}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Merge default + farm-specific colors
 const COLORS: Record<string, string> = {
@@ -299,7 +328,8 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 
 // ─── Edit mode handles ─────────────────────────────────────────────
 // Rendered at Scene level (not inside ElementMesh) to avoid remount during drag.
-// All position updates are imperative via refs + useFrame reading from store.
+// Design: pinhead sphere on a tall stick (drag to move), flat ring at ground (drag to rotate).
+// Uses global window pointerup/pointermove for robust touch handling.
 
 function EditGizmo() {
   const editingElementId = useStore(s => s.editingElementId);
@@ -308,135 +338,155 @@ function EditGizmo() {
 }
 
 function EditGizmoInner({ elementId }: { elementId: string }) {
-  const { camera, raycaster, pointer } = useThree();
-  const dragRef = useRef(false);
-  const rotateRef = useRef(false);
-  const groupRef = useRef<THREE.Group>(null);
-  const moveMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const rotateMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const dirIndicatorRef = useRef<THREE.Mesh>(null);
+  const { camera, raycaster, gl } = useThree();
+  const modeRef = useRef<'idle' | 'drag' | 'rotate'>('idle');
+  const poleRef = useRef<THREE.Group>(null);
+  const pinRef = useRef<THREE.Mesh>(null);
+  const pinMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const ringGroupRef = useRef<THREE.Group>(null);
+  const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const dirRef = useRef<THREE.Mesh>(null);
   const groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersectPoint = useMemo(() => new THREE.Vector3(), []);
+  const pointerNDC = useMemo(() => new THREE.Vector2(), []);
 
-  // Get initial element for sizing
+  // Element sizing
   const initEl = useStore(s => s.elements.find(e => e.id === elementId));
   const elHeight = initEl?.elevation || 20;
-  // Float above the element — gizmo sits at element top + offset
-  const gizmoY = elHeight + 10;
-  const moveRadius = 8; // big, easy-to-grab disc
-  const rotateInner = moveRadius + 3;
-  const rotateOuter = rotateInner + 4;
+  const pinHeight = elHeight + 25; // tall stick above element
+  const pinRadius = 5; // large sphere at top — easy to grab
+  const ringRadius = Math.max(initEl?.width || 10, initEl?.height || 10, 10) * 0.5 + 5;
+  const ringThickness = 3;
 
+  // Convert DOM event coords to NDC for raycasting
+  const toNDC = useCallback((clientX: number, clientY: number) => {
+    const rect = gl.domElement.getBoundingClientRect();
+    pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  }, [gl, pointerNDC]);
+
+  // Global pointer move — runs outside R3F event system
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (modeRef.current === 'idle') return;
+      const el = useStore.getState().elements.find(e2 => e2.id === elementId);
+      if (!el) return;
+      toNDC(e.clientX, e.clientY);
+      raycaster.setFromCamera(pointerNDC, camera);
+      if (!raycaster.ray.intersectPlane(groundPlane, intersectPoint)) return;
+
+      if (modeRef.current === 'drag') {
+        useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
+      } else if (modeRef.current === 'rotate') {
+        const dx = intersectPoint.x - el.x;
+        const dz = intersectPoint.z - (-el.y);
+        const degrees = (Math.atan2(dx, dz) * 180) / Math.PI;
+        useStore.getState().rotateElement(elementId, degrees);
+      }
+    };
+
+    const onUp = () => {
+      if (modeRef.current === 'idle') return;
+      const wasDrag = modeRef.current === 'drag';
+      modeRef.current = 'idle';
+      // Reset visuals
+      if (wasDrag && pinMatRef.current) {
+        pinMatRef.current.color.set('#4488ff');
+        pinMatRef.current.opacity = 0.8;
+      }
+      if (!wasDrag && ringMatRef.current) {
+        ringMatRef.current.color.set('#ff6622');
+        ringMatRef.current.opacity = 0.5;
+      }
+      useStore.getState().persistElement(elementId);
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [elementId, camera, raycaster, groundPlane, intersectPoint, pointerNDC, toNDC, gl]);
+
+  // Imperative frame updates — position pole, ring, direction indicator
   useFrame(() => {
     const el = useStore.getState().elements.find(e => e.id === elementId);
     if (!el) return;
-
-    // Keep gizmo floating above element
-    if (groupRef.current) {
-      groupRef.current.position.set(el.x, gizmoY, -el.y);
-    }
-
-    // Update direction indicator
-    if (dirIndicatorRef.current) {
+    // Pole group at element position
+    if (poleRef.current) poleRef.current.position.set(el.x, 0, -el.y);
+    // Ring group at ground level
+    if (ringGroupRef.current) ringGroupRef.current.position.set(el.x, 0.5, -el.y);
+    // Direction indicator on ring
+    if (dirRef.current) {
       const rad = (el.rotation * Math.PI) / 180;
-      const r = (rotateInner + rotateOuter) / 2;
-      dirIndicatorRef.current.position.set(
-        r * Math.sin(rad),
-        0,
-        r * Math.cos(rad),
+      dirRef.current.position.set(
+        el.x + ringRadius * Math.sin(rad),
+        2,
+        -el.y + ringRadius * Math.cos(rad),
       );
-    }
-
-    // Drag move
-    if (dragRef.current) {
-      raycaster.setFromCamera(pointer, camera);
-      if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-        useStore.getState().moveElement(elementId, intersectPoint.x, -intersectPoint.z);
-      }
-    }
-
-    // Drag rotate
-    if (rotateRef.current) {
-      raycaster.setFromCamera(pointer, camera);
-      if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
-        const dx = intersectPoint.x - el.x;
-        const dz = intersectPoint.z - (-el.y);
-        const angle = Math.atan2(dx, dz);
-        const degrees = (angle * 180) / Math.PI;
-        useStore.getState().rotateElement(elementId, degrees);
-      }
     }
   });
 
-  // Move handle events
-  const onMoveDown = useCallback((e: any) => {
+  const onPinDown = useCallback((e: any) => {
     e.stopPropagation();
-    dragRef.current = true;
-    if (moveMatRef.current) moveMatRef.current.opacity = 0.6;
+    modeRef.current = 'drag';
+    if (pinMatRef.current) { pinMatRef.current.color.set('#66aaff'); pinMatRef.current.opacity = 1; }
   }, []);
-  const onMoveUp = useCallback(() => {
-    if (!dragRef.current) return;
-    dragRef.current = false;
-    if (moveMatRef.current) moveMatRef.current.opacity = 0.35;
-    useStore.getState().persistElement(elementId);
-  }, [elementId]);
 
-  // Rotate handle events
-  const onRotateDown = useCallback((e: any) => {
+  const onRingDown = useCallback((e: any) => {
     e.stopPropagation();
-    rotateRef.current = true;
-    if (rotateMatRef.current) { rotateMatRef.current.color.set('#ff8844'); rotateMatRef.current.opacity = 0.7; }
+    modeRef.current = 'rotate';
+    if (ringMatRef.current) { ringMatRef.current.color.set('#ff8844'); ringMatRef.current.opacity = 0.8; }
   }, []);
-  const onRotateUp = useCallback(() => {
-    if (!rotateRef.current) return;
-    rotateRef.current = false;
-    if (rotateMatRef.current) { rotateMatRef.current.color.set('#ff6622'); rotateMatRef.current.opacity = 0.5; }
-    useStore.getState().persistElement(elementId);
-  }, [elementId]);
+
+  const ix = initEl?.x || 0;
+  const iy = initEl?.y || 0;
 
   return (
-    <group ref={groupRef} position={initEl ? [initEl.x, gizmoY, -initEl.y] : [0, gizmoY, 0]}>
-      {/* Vertical pole connecting gizmo to element */}
-      <mesh position={[0, -gizmoY / 2, 0]}>
-        <cylinderGeometry args={[0.3, 0.3, gizmoY, 8]} />
-        <meshBasicMaterial color="#4488ff" transparent opacity={0.4} />
-      </mesh>
+    <>
+      {/* ── Move handle: tall pole with pinhead sphere ── */}
+      <group ref={poleRef} position={[ix, 0, -iy]}>
+        {/* Pole */}
+        <mesh position={[0, pinHeight / 2, 0]}>
+          <cylinderGeometry args={[0.4, 0.4, pinHeight, 8]} />
+          <meshBasicMaterial color="#4488ff" transparent opacity={0.5} depthTest={false} />
+        </mesh>
+        {/* Pinhead sphere — large, easy to grab */}
+        <mesh
+          ref={pinRef}
+          position={[0, pinHeight, 0]}
+          onPointerDown={onPinDown}
+        >
+          <sphereGeometry args={[pinRadius, 16, 12]} />
+          <meshBasicMaterial ref={pinMatRef} color="#4488ff" transparent opacity={0.8} depthTest={false} />
+        </mesh>
+        {/* Cross icon on pinhead */}
+        <mesh position={[0, pinHeight + pinRadius + 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.5, 1.5, 4]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.9} depthTest={false} />
+        </mesh>
+      </group>
 
-      {/* Move disc — large, easy to grab */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        onPointerDown={onMoveDown}
-        onPointerUp={onMoveUp}
-        onPointerCancel={onMoveUp}
-        onPointerLeave={onMoveUp}
-      >
-        <circleGeometry args={[moveRadius, 32]} />
-        <meshBasicMaterial ref={moveMatRef} color="#4488ff" transparent opacity={0.35} side={THREE.DoubleSide} depthTest={false} />
-      </mesh>
-      {/* Move icon — cross arrows */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-        <ringGeometry args={[1, 2, 4]} />
-        <meshBasicMaterial color="#4488ff" transparent opacity={0.9} depthTest={false} />
-      </mesh>
+      {/* ── Rotate handle: flat ring at ground level ── */}
+      <group ref={ringGroupRef} position={[ix, 0.5, -iy]}>
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          onPointerDown={onRingDown}
+        >
+          <ringGeometry args={[ringRadius - ringThickness / 2, ringRadius + ringThickness / 2, 48]} />
+          <meshBasicMaterial ref={ringMatRef} color="#ff6622" transparent opacity={0.5} side={THREE.DoubleSide} depthTest={false} />
+        </mesh>
+      </group>
 
-      {/* Rotate ring — outside the move disc */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        onPointerDown={onRotateDown}
-        onPointerUp={onRotateUp}
-        onPointerCancel={onRotateUp}
-        onPointerLeave={onRotateUp}
-      >
-        <ringGeometry args={[rotateInner, rotateOuter, 32]} />
-        <meshBasicMaterial ref={rotateMatRef} color="#ff6622" transparent opacity={0.5} side={THREE.DoubleSide} depthTest={false} />
-      </mesh>
-
-      {/* Direction indicator sphere */}
-      <mesh ref={dirIndicatorRef}>
+      {/* Direction indicator on ring */}
+      <mesh ref={dirRef} position={[ix + ringRadius, 2, -iy]}>
         <sphereGeometry args={[2.5, 8, 8]} />
         <meshBasicMaterial color="#ff6622" depthTest={false} />
       </mesh>
-    </group>
+    </>
   );
 }
 
@@ -708,14 +758,16 @@ export function FarmScene() {
           </div>
         </div>
       )}
-      <Canvas
-        shadows
-        camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position as [number, number, number] }}
-        gl={{ antialias: true }}
-        onCreated={() => setReady(true)}
-      >
-        <Scene />
-      </Canvas>
+      <CanvasErrorBoundary>
+        <Canvas
+          shadows
+          camera={{ fov: 50, near: 1, far: cam.far || 2000, position: cam.position as [number, number, number] }}
+          gl={{ antialias: true }}
+          onCreated={() => setReady(true)}
+        >
+          <Scene />
+        </Canvas>
+      </CanvasErrorBoundary>
     </div>
   );
 }
