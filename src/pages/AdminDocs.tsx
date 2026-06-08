@@ -104,7 +104,7 @@ export default function AdminDocs() {
         {content ? (
           <article
             className="doc-content"
-            dangerouslySetInnerHTML={{ __html: rendered }}
+            dangerouslySetInnerHTML={{ __html: rendered.replace(/<table>/g, '<div class="table-scroll"><table>').replace(/<\/table>/g, '</table></div>') }}
           />
         ) : (
           <p className="text-earth-400 text-center">Loading document...</p>
@@ -168,33 +168,31 @@ export default function AdminDocs() {
           color: var(--color-earth-500, #7a6f62);
         }
 
-        /* Table wrapper for horizontal scroll on mobile */
-        .doc-content table {
-          display: block;
+        /* Table wrapper for independent horizontal scroll */
+        .doc-content .table-scroll {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           margin: 1rem 0;
+          border: 1px solid var(--color-earth-700, #3d3528);
+          border-radius: 6px;
+        }
+
+        .doc-content table {
           border-collapse: collapse;
           font-size: 0.8rem;
-          width: max-content;
-          min-width: 100%;
-        }
-
-        .doc-content thead {
-          display: table-header-group;
-        }
-
-        .doc-content tbody {
-          display: table-row-group;
+          width: 100%;
+          min-width: max-content;
         }
 
         .doc-content tr {
-          display: table-row;
           border-bottom: 1px solid var(--color-earth-700, #3d3528);
         }
 
+        .doc-content tr:last-child {
+          border-bottom: none;
+        }
+
         .doc-content th {
-          display: table-cell;
           padding: 0.5rem 0.75rem;
           text-align: left;
           font-weight: 600;
@@ -205,10 +203,8 @@ export default function AdminDocs() {
         }
 
         .doc-content td {
-          display: table-cell;
           padding: 0.5rem 0.75rem;
           color: var(--color-earth-200, #d4c8b8);
-          border-bottom: 1px solid var(--color-earth-700, #3d3528);
         }
 
         .doc-content tr:hover td {
