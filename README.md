@@ -8,6 +8,19 @@ Interactive 3D property viewer, element tracking, activity logging, member manag
 
 ---
 
+> **⚠️ PUBLIC REPOSITORY — NO PRIVATE CONTENT**
+>
+> This is a **public, open-source** repository. It MUST NOT contain any private, confidential, or farm-specific content including but not limited to:
+> - Business plans, financial projections, or economic analyses
+> - Personal information, names, addresses, or credentials
+> - Farm-specific data, configurations, or operational details
+> - API keys, secrets, tokens, or passwords
+> - Any content that belongs in a private deployment wrapper repo
+>
+> All farm-specific content belongs in the **private deployment repo** that uses this as a submodule. If you are an AI agent working on this repo, see `AGENTS.md` for detailed instructions.
+
+---
+
 ## Features
 
 | Feature | Description |
