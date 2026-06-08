@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { marked } from 'marked';
 import { useStore } from '@/lib/store';
 import * as api from '@/lib/api';
 
@@ -75,9 +76,11 @@ export default function AdminDocs() {
     );
   }
 
+  const rendered = content ? marked.parse(content, { async: false }) as string : '';
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-earth-900 text-earth-100">
-      <div className="max-w-3xl mx-auto px-4 py-6 pb-12">
+      <div className="max-w-3xl mx-auto px-4 py-6 pb-16">
         {/* Doc selector (if multiple docs) */}
         {docList.length > 1 && (
           <div className="flex gap-2 mb-6 flex-wrap">
@@ -99,105 +102,146 @@ export default function AdminDocs() {
 
         {/* Markdown content */}
         {content ? (
-          <div className="prose prose-invert prose-sm max-w-none
-            prose-headings:text-forest-300
-            prose-h1:text-xl prose-h1:font-bold prose-h1:mb-4
-            prose-h2:text-lg prose-h2:font-semibold prose-h2:mt-8 prose-h2:mb-3
-            prose-h3:text-base prose-h3:font-medium prose-h3:mt-6 prose-h3:mb-2
-            prose-p:text-earth-200 prose-p:leading-relaxed
-            prose-strong:text-earth-100
-            prose-li:text-earth-200
-            prose-table:text-sm
-            prose-th:text-earth-300 prose-th:font-medium prose-th:border-earth-600 prose-th:px-3 prose-th:py-2
-            prose-td:text-earth-200 prose-td:border-earth-700 prose-td:px-3 prose-td:py-2
-            prose-hr:border-earth-700
-          ">
-            <div dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }} />
-          </div>
+          <article
+            className="doc-content"
+            dangerouslySetInnerHTML={{ __html: rendered }}
+          />
         ) : (
           <p className="text-earth-400 text-center">Loading document...</p>
         )}
       </div>
+
+      <style>{`
+        .doc-content {
+          color: var(--color-earth-200, #d4c8b8);
+          line-height: 1.7;
+          font-size: 0.9rem;
+        }
+
+        .doc-content h1 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: var(--color-forest-300, #86c98a);
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid var(--color-earth-700, #3d3528);
+        }
+
+        .doc-content h2 {
+          font-size: 1.2rem;
+          font-weight: 600;
+          color: var(--color-forest-300, #86c98a);
+          margin: 2rem 0 0.75rem 0;
+        }
+
+        .doc-content h3 {
+          font-size: 1.05rem;
+          font-weight: 500;
+          color: var(--color-earth-100, #f0e8dc);
+          margin: 1.5rem 0 0.5rem 0;
+        }
+
+        .doc-content p {
+          margin: 0.75rem 0;
+        }
+
+        .doc-content strong {
+          color: var(--color-earth-100, #f0e8dc);
+        }
+
+        .doc-content hr {
+          border: none;
+          border-top: 1px solid var(--color-earth-700, #3d3528);
+          margin: 2rem 0;
+        }
+
+        .doc-content ul {
+          margin: 0.75rem 0;
+          padding-left: 1.5rem;
+        }
+
+        .doc-content li {
+          margin: 0.35rem 0;
+        }
+
+        .doc-content li::marker {
+          color: var(--color-earth-500, #7a6f62);
+        }
+
+        /* Table wrapper for horizontal scroll on mobile */
+        .doc-content table {
+          display: block;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          margin: 1rem 0;
+          border-collapse: collapse;
+          font-size: 0.8rem;
+          width: max-content;
+          min-width: 100%;
+        }
+
+        .doc-content thead {
+          display: table-header-group;
+        }
+
+        .doc-content tbody {
+          display: table-row-group;
+        }
+
+        .doc-content tr {
+          display: table-row;
+          border-bottom: 1px solid var(--color-earth-700, #3d3528);
+        }
+
+        .doc-content th {
+          display: table-cell;
+          padding: 0.5rem 0.75rem;
+          text-align: left;
+          font-weight: 600;
+          color: var(--color-earth-100, #f0e8dc);
+          background: var(--color-earth-800, #2a2419);
+          border-bottom: 2px solid var(--color-earth-600, #5a5044);
+          white-space: nowrap;
+        }
+
+        .doc-content td {
+          display: table-cell;
+          padding: 0.5rem 0.75rem;
+          color: var(--color-earth-200, #d4c8b8);
+          border-bottom: 1px solid var(--color-earth-700, #3d3528);
+        }
+
+        .doc-content tr:hover td {
+          background: var(--color-earth-800, #2a2419);
+        }
+
+        .doc-content code {
+          background: var(--color-earth-800, #2a2419);
+          padding: 0.15rem 0.4rem;
+          border-radius: 3px;
+          font-size: 0.8rem;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 640px) {
+          .doc-content {
+            font-size: 0.85rem;
+          }
+          .doc-content h1 {
+            font-size: 1.3rem;
+          }
+          .doc-content h2 {
+            font-size: 1.1rem;
+          }
+          .doc-content table {
+            font-size: 0.75rem;
+          }
+          .doc-content th,
+          .doc-content td {
+            padding: 0.4rem 0.5rem;
+          }
+        }
+      `}</style>
     </div>
   );
-}
-
-/**
- * Minimal markdown-to-HTML converter.
- * Handles headings, bold, italic, code, lists, tables, and horizontal rules.
- */
-function markdownToHtml(md: string): string {
-  const lines = md.split('\n');
-  let html = '';
-  let inTable = false;
-  let inList = false;
-  let headerRow = true;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Horizontal rule
-    if (/^---+$/.test(line.trim())) {
-      if (inTable) { html += '</tbody></table>'; inTable = false; }
-      if (inList) { html += '</ul>'; inList = false; }
-      html += '<hr />';
-      continue;
-    }
-
-    // Table row
-    if (line.trim().startsWith('|')) {
-      const cells = line.split('|').slice(1, -1).map(c => c.trim());
-      if (cells.every(c => /^[-: ]+$/.test(c))) continue;
-
-      if (!inTable) {
-        if (inList) { html += '</ul>'; inList = false; }
-        html += '<table><thead>';
-        inTable = true;
-        headerRow = true;
-      }
-
-      if (headerRow) {
-        html += '<tr>' + cells.map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>';
-        headerRow = false;
-      } else {
-        html += '<tr>' + cells.map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
-      }
-      continue;
-    } else if (inTable) {
-      html += '</tbody></table>';
-      inTable = false;
-    }
-
-    // Headings
-    if (line.startsWith('### ')) { if (inList) { html += '</ul>'; inList = false; } html += `<h3>${inline(line.slice(4))}</h3>`; continue; }
-    if (line.startsWith('## ')) { if (inList) { html += '</ul>'; inList = false; } html += `<h2>${inline(line.slice(3))}</h2>`; continue; }
-    if (line.startsWith('# ')) { if (inList) { html += '</ul>'; inList = false; } html += `<h1>${inline(line.slice(2))}</h1>`; continue; }
-
-    // List items
-    if (/^[-*] /.test(line.trim())) {
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${inline(line.trim().slice(2))}</li>`;
-      continue;
-    } else if (inList) {
-      html += '</ul>';
-      inList = false;
-    }
-
-    // Empty line
-    if (line.trim() === '') continue;
-
-    // Paragraph
-    html += `<p>${inline(line)}</p>`;
-  }
-
-  if (inTable) html += '</tbody></table>';
-  if (inList) html += '</ul>';
-  return html;
-}
-
-function inline(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>');
 }
