@@ -15,6 +15,7 @@ const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const Vision = lazy(() => import('@/pages/Vision'));
 const Fieldwork = lazy(() => import('@/pages/Fieldwork'));
 const Members = lazy(() => import('@/pages/Members'));
+const AdminDocs = lazy(() => import('@/pages/AdminDocs'));
 
 /**
  * Dashboard — 3D map view. Always mounted to avoid Canvas remount/black screen.
@@ -219,6 +220,7 @@ export default function App() {
               <Route path="/vision" component={Vision} />
               <Route path="/fieldwork" component={Fieldwork} />
               <Route path="/members" component={Members} />
+              <Route path="/docs" component={AdminDocs} />
             </Switch>
           </Suspense>
         )}

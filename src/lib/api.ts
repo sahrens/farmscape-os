@@ -259,3 +259,11 @@ export const data = {
     return request<ChangelogEntry[]>(`/api/data/changelog${q ? `?${q}` : ''}`);
   },
 };
+
+// Admin docs (content provided by private deployment repo)
+export const docs = {
+  list: () =>
+    request<{ slug: string; title: string }[]>('/api/docs'),
+  get: (slug: string) =>
+    request<{ slug: string; content: string }>(`/api/docs/${slug}`),
+};

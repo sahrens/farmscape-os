@@ -500,6 +500,28 @@ export default {
       }
 
       // =====================
+      // ADMIN DOCS ENDPOINTS
+      // =====================
+      // Generic admin-only document viewer. Content is provided by the private
+      // deployment repo via the DOCS env binding (Record<slug, markdown string>).
+      // This repo contains NO document content — only the serving mechanism.
+
+      if (path === '/api/docs' && request.method === 'GET') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const docs = (env as any).DOCS as Record<string, string> | undefined;
+        if (!docs) return json([]);
+        return json(Object.keys(docs).map(slug => ({ slug, title: slug.replace(/-/g, ' ') })));
+      }
+
+      if (path.startsWith('/api/docs/') && request.method === 'GET') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const slug = path.slice('/api/docs/'.length);
+        const docs = (env as any).DOCS as Record<string, string> | undefined;
+        if (!docs || !docs[slug]) return json({ error: 'Not found' }, 404);
+        return json({ slug, content: docs[slug] });
+      }
+
+      // =====================
       // DATA EXPLORER ENDPOINTS
       // =====================
 
