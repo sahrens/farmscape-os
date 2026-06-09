@@ -49,11 +49,11 @@ function generateToken(): string {
 }
 
 function sessionCookie(token: string, maxAge = 30 * 24 * 3600): string {
-  return `farm_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+  return `farm_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 function clearSessionCookie(): string {
-  return 'farm_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+  return 'farm_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
 }
 
 function getSessionToken(request: Request): string | null {
@@ -122,7 +122,8 @@ async function sendInviteEmail(
   inviterName: string,
   farmName: string,
   siteUrl: string,
-  apiKey: string
+  apiKey: string,
+  magicLink: string
 ): Promise<boolean> {
   const roleLabel = role === 'admin' ? 'an admin' : role === 'member' ? 'a member' : 'a viewer';
   try {
@@ -135,7 +136,7 @@ async function sendInviteEmail(
       body: JSON.stringify({
         to: [email],
         subject: `${inviterName} invited you to ${farmName}`,
-        text: `${farmName}\n\n${inviterName} has invited you as ${roleLabel}.\n\nVisit ${siteUrl} and enter your email to log in.\n\n— Farmscape-OS`,
+        text: `${farmName}\n\n${inviterName} has invited you as ${roleLabel}.\n\nTap this link to join:\n\n  ${magicLink}\n\nThis link expires in 30 days.\n\n— Farmscape-OS`,
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
   <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;">
     <div style="background:#2d5016;padding:20px 24px;">
@@ -143,8 +144,9 @@ async function sendInviteEmail(
     </div>
     <div style="padding:24px;">
       <p style="color:#333;font-size:15px;line-height:1.5;margin:0 0 8px;"><strong>${inviterName}</strong> has invited you as ${roleLabel}.</p>
-      <p style="color:#555;font-size:14px;line-height:1.5;margin:0 0 20px;">Visit the link below and enter your email to log in:</p>
-      <a href="${siteUrl}" style="display:inline-block;background:#2d5016;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Open ${farmName}</a>
+      <p style="color:#555;font-size:14px;line-height:1.5;margin:0 0 20px;">Tap the button below to join:</p>
+      <a href="${magicLink}" style="display:inline-block;background:#2d5016;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Join ${farmName}</a>
+      <p style="color:#999;font-size:12px;margin:20px 0 0;">This link expires in 30 days.</p>
     </div>
     <div style="padding:12px 24px;background:#f9f9f9;border-top:1px solid #e5e5e5;">
       <p style="color:#aaa;font-size:11px;margin:0;">Farmscape-OS</p>
@@ -439,11 +441,19 @@ export default {
           `INSERT INTO users (id, email, role, status, created_by) VALUES (?, ?, ?, 'invited', ?)`
         ).bind(id, normalizedEmail, memberRole, user.id).run();
 
-        // Send invite email
+        // Generate OTP for magic link (30 day expiry for invites)
+        const code = generateOtp();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare(
+          'INSERT INTO otp_codes (email, code, expires_at) VALUES (?, ?, ?)'
+        ).bind(normalizedEmail, code, expiresAt).run();
+
+        // Send invite email with magic link
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
         const farmName = 'Kahiliholo Farm';
-        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY);
+        const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(normalizedEmail)}&code=${code}`;
+        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY, magicLink);
 
         await logChange(env.DB, 'users', id, 'invite', user.id, { email: normalizedEmail, role: memberRole });
         return json({ ok: true, id });
@@ -460,10 +470,18 @@ export default {
         if (!member) return json({ error: 'Member not found' }, 404);
         if (member.status !== 'invited') return json({ error: 'Member has already joined' }, 400);
 
+        // Generate fresh OTP for magic link (30 day expiry)
+        const code = generateOtp();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare(
+          'INSERT INTO otp_codes (email, code, expires_at) VALUES (?, ?, ?)'
+        ).bind(member.email, code, expiresAt).run();
+
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
         const farmName = 'Kahiliholo Farm';
-        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY);
+        const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(member.email)}&code=${code}`;
+        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY, magicLink);
         if (!sent) return json({ error: 'Failed to send email' }, 500);
         return json({ ok: true });
       }
