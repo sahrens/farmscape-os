@@ -6,7 +6,7 @@ assets = { directory = "./dist" }
 [[d1_databases]]
 binding = "DB"
 database_name = "farmscape-os-db"
-database_id = "YOUR_D1_DATABASE_ID_HERE"
+database_id = "82bbc18a-28f9-43ab-8112-a546c3e919f1"
 
 # AUTH_PASSWORD is stored as a Cloudflare secret, NOT in this file.
 # Set it with: npx wrangler secret put AUTH_PASSWORD

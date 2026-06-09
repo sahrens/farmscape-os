@@ -321,7 +321,7 @@ export default {
         // Redirect to login with error — link expired or already used
         return new Response(null, {
           status: 302,
-          headers: { Location: '/?error=expired' },
+          headers: { Location: '/login?error=link_expired' },
         });
       }
 
@@ -333,7 +333,7 @@ export default {
         .bind(normalizedEmail).first<{ id: string; name: string | null; role: string; status: string }>();
 
       if (!user) {
-        return new Response(null, { status: 302, headers: { Location: '/?error=not_found' } });
+        return new Response(null, { status: 302, headers: { Location: '/login?error=not_found' } });
       }
 
       // Activate on first login
