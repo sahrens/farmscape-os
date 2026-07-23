@@ -16,6 +16,7 @@ const Vision = lazy(() => import('@/pages/Vision'));
 const Fieldwork = lazy(() => import('@/pages/Fieldwork'));
 const Members = lazy(() => import('@/pages/Members'));
 const AdminDocs = lazy(() => import('@/pages/AdminDocs'));
+const EditHistory = lazy(() => import('@/pages/EditHistory'));
 
 /**
  * Dashboard — 3D map view. Always mounted to avoid Canvas remount/black screen.
@@ -87,8 +88,21 @@ function Dashboard({ visible }: { visible: boolean }) {
           </span>
           <span className="text-blue-300 text-xs">Pin = move · Ring = rotate</span>
           <button
+            onClick={() => {
+              if (editingElementId) {
+                useStore.getState().undoElement(editingElementId).then(() => {
+                  useStore.getState().fetchElements();
+                });
+              }
+            }}
+            className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded-lg active:scale-95 transition-colors"
+            title="Undo last position/rotation change"
+          >
+            ↩ Undo
+          </button>
+          <button
             onClick={exitEditMode}
-            className="ml-2 px-3 py-1 bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium rounded-lg active:scale-95 transition-colors"
+            className="px-3 py-1 bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium rounded-lg active:scale-95 transition-colors"
           >
             Done
           </button>
@@ -221,6 +235,7 @@ export default function App() {
               <Route path="/fieldwork" component={Fieldwork} />
               <Route path="/members" component={Members} />
               <Route path="/docs" component={AdminDocs} />
+              <Route path="/history" component={EditHistory} />
             </Switch>
           </Suspense>
         )}

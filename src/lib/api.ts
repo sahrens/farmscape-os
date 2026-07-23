@@ -84,6 +84,27 @@ export const elements = {
     request<{ ok: boolean }>(`/api/elements/${id}`, {
       method: 'DELETE',
     }),
+  history: (id: string, limit?: number) =>
+    request<ChangelogEntry[]>(`/api/elements/${id}/history${limit ? `?limit=${limit}` : ''}`),
+  revert: (id: string, snapshot: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/api/elements/${id}/revert`, {
+      method: 'POST',
+      body: JSON.stringify({ snapshot }),
+    }),
+};
+
+// Global edit history (admin)
+export interface EditHistoryEntry extends ChangelogEntry {
+  element_name: string | null;
+}
+export const editHistory = {
+  list: (params?: { limit?: number; before?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.before) qs.set('before', params.before);
+    const q = qs.toString();
+    return request<EditHistoryEntry[]>(`/api/edit-history${q ? `?${q}` : ''}`);
+  },
 };
 
 // Activities
