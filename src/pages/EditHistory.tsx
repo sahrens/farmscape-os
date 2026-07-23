@@ -16,7 +16,7 @@ export default function EditHistory() {
   const [hasMore, setHasMore] = useState(true);
   const [reverting, setReverting] = useState<number | null>(null);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const isAdmin = user?.role === 'admin';
 
   const loadEntries = useCallback(async (before?: string) => {
     try {
