@@ -767,6 +767,76 @@ export default {
         return json({ ok: true });
       }
 
+      // --- ELEMENT HISTORY (position/rotation changes) ---
+      // GET /api/elements/:id/history — returns changelog entries for this element
+      if (path.match(/^\/api\/elements\/[^/]+\/history$/) && request.method === 'GET') {
+        const id = path.split('/')[3];
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+        const { results } = await env.DB.prepare(
+          `SELECT * FROM changelog WHERE table_name = 'elements' AND row_id = ? ORDER BY created_at DESC LIMIT ?`
+        ).bind(id, limit).all();
+        return json(results);
+      }
+
+      // POST /api/elements/:id/revert — revert element to state from a changelog entry
+      if (path.match(/^\/api\/elements\/[^/]+\/revert$/) && request.method === 'POST') {
+        if (!canWrite(user.role)) return json({ error: 'Write access required' }, 403);
+        const id = path.split('/')[3];
+        const body = await request.json() as { changelog_id?: number; snapshot?: Record<string, unknown> };
+
+        // Get the element's current state for the revert log
+        const current = await env.DB.prepare('SELECT * FROM elements WHERE id = ?').bind(id).first();
+        if (!current) return json({ error: 'Element not found' }, 404);
+
+        let revertData: Record<string, unknown>;
+
+        if (body.snapshot) {
+          // Direct snapshot revert (from undo stack)
+          revertData = body.snapshot;
+        } else if (body.changelog_id) {
+          // Revert to state captured in a specific changelog entry's delta
+          const entry = await env.DB.prepare(
+            `SELECT * FROM changelog WHERE id = ? AND table_name = 'elements' AND row_id = ?`
+          ).bind(body.changelog_id, id).first<{ delta: string | null }>();
+          if (!entry || !entry.delta) return json({ error: 'Changelog entry not found' }, 404);
+          // The delta contains the fields that were SET in that update.
+          // To revert, we need the state BEFORE that update.
+          // For position reverts, we'll use the snapshot approach instead.
+          return json({ error: 'Use snapshot-based revert for position changes' }, 400);
+        } else {
+          return json({ error: 'Provide changelog_id or snapshot' }, 400);
+        }
+
+        // Apply the revert
+        const fields = Object.keys(revertData).filter(k => k !== 'id' && k !== 'created_at' && k !== 'created_by');
+        if (fields.length === 0) return json({ ok: true });
+        const setClauses = fields.map(f => `${f}=?`).join(', ');
+        const values = fields.map(f => f === 'metadata' ? JSON.stringify(revertData[f]) : revertData[f]);
+        await env.DB.prepare(
+          `UPDATE elements SET ${setClauses}, updated_at=datetime('now'), synced_at=datetime('now') WHERE id=?`
+        ).bind(...values, id).run();
+        await logChange(env.DB, 'elements', id, 'revert', user.id, { reverted_from: current, reverted_to: revertData });
+        return json({ ok: true });
+      }
+
+      // --- GLOBAL EDIT HISTORY (all element changes, for the history panel) ---
+      // GET /api/edit-history — returns recent element changes across all elements
+      if (path === '/api/edit-history' && request.method === 'GET') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
+        const before = url.searchParams.get('before'); // ISO timestamp for pagination
+        let query = `SELECT c.*, e.name as element_name FROM changelog c LEFT JOIN elements e ON c.row_id = e.id WHERE c.table_name = 'elements'`;
+        const params: unknown[] = [];
+        if (before) {
+          query += ' AND c.created_at < ?';
+          params.push(before);
+        }
+        query += ' ORDER BY c.created_at DESC LIMIT ?';
+        params.push(limit);
+        const { results } = await env.DB.prepare(query).bind(...params).all();
+        return json(results);
+      }
+
       // --- ACTIVITIES ---
       if (path === '/api/activities' && request.method === 'GET') {
         const elementId = url.searchParams.get('element_id');

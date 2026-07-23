@@ -66,6 +66,11 @@ interface FarmStore {
   enterEditMode: (elementId: string) => void;
   exitEditMode: () => void;
 
+  // Undo stack (per-element position/rotation snapshots)
+  undoStack: Array<{ elementId: string; x: number; y: number; rotation: number; timestamp: number }>;
+  pushUndo: (elementId: string) => void;
+  undoElement: (elementId: string) => Promise<boolean>;
+
   // Element CRUD
   createElement: (el: Partial<FarmElement>) => Promise<string | null>;
   updateElement: (id: string, updates: Partial<FarmElement>) => Promise<boolean>;
@@ -196,15 +201,53 @@ export const useStore = create<FarmStore>((set, get) => ({
   editMode: false,
   editingElementId: null,
   enterEditMode: (elementId) => {
+    // Only close sidebar on mobile (< 768px) — desktop has enough space
+    const closeSidebar = typeof window !== 'undefined' && window.innerWidth < 768;
     set({
       editMode: true,
       editingElementId: elementId,
       selectedId: elementId,
-      sidebarOpen: false,
+      ...(closeSidebar ? { sidebarOpen: false } : {}),
     });
   },
   exitEditMode: () => {
     set({ editMode: false, editingElementId: null });
+  },
+
+  // Undo stack
+  undoStack: [],
+  pushUndo: (elementId) => {
+    const el = get().elements.find(e => e.id === elementId);
+    if (!el) return;
+    set(s => ({
+      undoStack: [
+        ...s.undoStack.slice(-49), // keep last 50 entries
+        { elementId, x: el.x, y: el.y, rotation: el.rotation, timestamp: Date.now() },
+      ],
+    }));
+  },
+  undoElement: async (elementId) => {
+    const stack = get().undoStack;
+    // Find the most recent entry for this element
+    const idx = stack.findLastIndex(e => e.elementId === elementId);
+    if (idx === -1) return false;
+    const entry = stack[idx];
+    // Remove it from stack
+    set(s => ({ undoStack: s.undoStack.filter((_, i) => i !== idx) }));
+    // Apply locally
+    set(s => ({
+      elements: s.elements.map(el =>
+        el.id === elementId ? { ...el, x: entry.x, y: entry.y, rotation: entry.rotation } : el
+      ),
+    }));
+    // Persist to server
+    try {
+      await api.elements.revert(elementId, { x: entry.x, y: entry.y, rotation: entry.rotation });
+      return true;
+    } catch (err) {
+      console.error('Failed to revert element:', err);
+      return false;
+    }
   },
 
   // Element CRUD

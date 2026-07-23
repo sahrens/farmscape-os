@@ -171,6 +171,8 @@ function GableRoof({ w, d, roofHeight, color }: { w: number; d: number; roofHeig
 }
 
 // Structure element (box with gable roof)
+// NOTE: Position and rotation are applied by the parent ElementMesh group.
+// This component renders at local origin.
 function Structure({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const w = el.width || 20;
   const d = el.height || 15;
@@ -182,8 +184,7 @@ function Structure({ el, selected, onClick }: { el: FarmElement; selected: boole
 
   return (
     <group
-      position={[el.x, h / 2, -el.y]}
-      rotation={[0, (el.rotation * Math.PI) / 180, 0]}
+      position={[0, h / 2, 0]}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
       <mesh castShadow>
@@ -216,6 +217,7 @@ function Structure({ el, selected, onClick }: { el: FarmElement; selected: boole
 }
 
 // Tree element
+// NOTE: Position and rotation are applied by the parent ElementMesh group.
 function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const h = el.elevation || 20;
   const canopy = (el.width || 10) / 2;
@@ -226,7 +228,6 @@ function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
 
   return (
     <group
-      position={[el.x, 0, -el.y]}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
       <mesh position={[0, h * 0.35, 0]} castShadow>
@@ -260,6 +261,7 @@ function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
 }
 
 // Zone element (flat area with border)
+// NOTE: Position and rotation are applied by the parent ElementMesh group.
 function Zone({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const w = el.width || 30;
   const d = el.height || 30;
@@ -268,8 +270,7 @@ function Zone({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
 
   return (
     <group
-      position={[el.x, 0.2, -el.y]}
-      rotation={[0, (el.rotation * Math.PI) / 180, 0]}
+      position={[0, 0.2, 0]}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
@@ -299,6 +300,7 @@ function Zone({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
 }
 
 // Infrastructure (driveways, hedges, markers)
+// NOTE: Position and rotation are applied by the parent ElementMesh group.
 function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const w = el.width || 10;
   const d = el.height || 10;
@@ -306,7 +308,7 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 
   if (el.subtype === 'boundary_marker' || el.subtype === 'marker') {
     return (
-      <group position={[el.x, 0, -el.y]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      <group onClick={(e) => { e.stopPropagation(); onClick(); }}>
         <mesh position={[0, h / 2, 0]}>
           <cylinderGeometry args={[0.3, 0.3, h, 8]} />
           <meshStandardMaterial color={selected ? '#ffcc00' : '#ff4444'} />
@@ -319,8 +321,7 @@ function Infrastructure({ el, selected, onClick }: { el: FarmElement; selected: 
 
   return (
     <group
-      position={[el.x, h / 2, -el.y]}
-      rotation={[0, (el.rotation * Math.PI) / 180, 0]}
+      position={[0, h / 2, 0]}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
       <mesh>
@@ -416,10 +417,13 @@ function EditGizmoInner({ elementId }: { elementId: string }) {
         ringMatRef.current.opacity = 0.5;
       }
 
+      // Save current state to undo stack BEFORE applying the change
+      const store = useStore.getState();
+      store.pushUndo(elementId);
+
       // NOW write to store — one single update
       const pos = localPosRef.current;
       const rot = localRotRef.current;
-      const store = useStore.getState();
       if (wasDrag) {
         store.moveElement(elementId, pos.x, pos.y);
       } else {
@@ -733,9 +737,15 @@ function ElementMesh({ el }: { el: FarmElement }) {
 
   const isEditing = editMode && editingElementId === el.id;
 
-  // Wrap each element type in a group that we can register
+  // Wrap each element type in a group that we can register.
+  // Position and rotation are applied HERE so the gizmo can move the group
+  // imperatively without double-offsetting.
   return (
-    <group ref={groupRef}>
+    <group
+      ref={groupRef}
+      position={[el.x, 0, -el.y]}
+      rotation={[0, (el.rotation * Math.PI) / 180, 0]}
+    >
       {(() => {
         switch (el.type) {
           case 'structure':

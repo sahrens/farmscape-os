@@ -74,6 +74,11 @@ export function NavBar() {
               Docs
             </button>
           )}
+          {isAdmin && (
+            <button onClick={() => setLocation('/history')} className={linkClass(location === '/history')}>
+              History
+            </button>
+          )}
 
           {/* User menu */}
           {user && (
