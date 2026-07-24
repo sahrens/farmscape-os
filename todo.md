@@ -25,3 +25,13 @@
 - [x] Switch login/invite/bug-report emails from Resend to AgentMail with sender name "Farmscape-OS - Kahiliholo Farm"
 - [x] Fix AgentMail API usage — already using body_text correctly
 - [x] Update README and documentation files for context survival across compaction
+- [x] Fix drag offset bug: position/rotation on outer group, inner components at relative origin
+- [x] Fix sidebar auto-collapse: only close on mobile (< 768px), not desktop
+- [x] Undo/history system: per-element undo stack + global Edit History page
+- [x] Image layers: worker CRUD endpoints, API client, store state
+- [x] Image layers: Three.js rendering (textured ground plane with opacity)
+- [x] Image layers: LayersPanel UI (upload, opacity slider, visibility toggle, position/scale controls)
+- [x] Satellite layer: on-demand tile fetch + stitch → saved as normal image layer
+- [x] Terrain editing: heightmap with push/pull tools (isolated with toggle)
+- [x] Topo lines: derive and render from heightmap
+- [ ] Image layers project onto terrain surface when terrain is active (future: requires shader-based draping)

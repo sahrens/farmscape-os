@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
+import { TerrainMesh } from './TerrainMesh';
 
 // ─── Error boundary ───────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: string }
@@ -85,6 +86,47 @@ function Ground() {
         </mesh>
       )}
     </group>
+  );
+}
+
+// Image layer overlay — textured plane projected on ground
+function ImageLayerPlane({ layer }: { layer: import('@/lib/api').ImageLayer }) {
+  const texture = useMemo(() => {
+    if (!layer.url) return null;
+    const tex = new THREE.TextureLoader().load(layer.url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, [layer.url]);
+
+  if (!texture || !layer.visible) return null;
+
+  const rotRad = (layer.rotation || 0) * (Math.PI / 180);
+
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, rotRad, 0]}
+      position={[layer.x, 0.05 + (layer.sort_order || 0) * 0.01, -layer.y]}
+    >
+      <planeGeometry args={[layer.width, layer.height]} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        opacity={layer.opacity}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+function ImageLayers() {
+  const imageLayers = useStore(s => s.imageLayers);
+  return (
+    <>
+      {imageLayers.filter(l => l.visible).map(layer => (
+        <ImageLayerPlane key={layer.id} layer={layer} />
+      ))}
+    </>
   );
 }
 
@@ -772,6 +814,7 @@ function Scene() {
   const selectElement = useStore(s => s.selectElement);
   const editMode = useStore(s => s.editMode);
   const exitEditMode = useStore(s => s.exitEditMode);
+  const terrainEnabled = useStore(s => s.terrainEnabled);
 
   const filtered = useMemo(() => {
     return elements.filter(el => {
@@ -819,9 +862,10 @@ function Scene() {
       </mesh>
 
       {/* Ground & boundaries */}
-      <Ground />
+      {terrainEnabled ? <TerrainMesh /> : <Ground />}
       <BoundaryLine />
       <OverlayLines />
+      <ImageLayers />
 
       {/* Farm elements */}
       {filtered.map(el => (

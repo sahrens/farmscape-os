@@ -281,6 +281,66 @@ export const data = {
   },
 };
 
+// Terrain
+export interface TerrainData {
+  id: string;
+  grid_width: number;
+  grid_height: number;
+  cell_size: number;
+  origin_x: number;
+  origin_y: number;
+  heights: number[];
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export const terrain = {
+  get: () =>
+    request<TerrainData>('/api/terrain'),
+  save: (data: Partial<TerrainData>) =>
+    request<{ ok: boolean }>('/api/terrain', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+// Image Layers
+export interface ImageLayer {
+  id: string;
+  name: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  visible: number;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const layers = {
+  list: () =>
+    request<ImageLayer[]>('/api/layers'),
+  create: (layer: Partial<ImageLayer>) =>
+    request<ImageLayer>('/api/layers', {
+      method: 'POST',
+      body: JSON.stringify(layer),
+    }),
+  update: (id: string, updates: Partial<ImageLayer>) =>
+    request<ImageLayer>(`/api/layers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/layers/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 // Admin docs (content provided by private deployment repo)
 export const docs = {
   list: () =>

@@ -168,6 +168,37 @@ CREATE TABLE IF NOT EXISTS bug_report_attachments (
   FOREIGN KEY (report_id) REFERENCES bug_reports(id)
 );
 
+-- Terrain heightmap: stores the editable terrain surface
+CREATE TABLE IF NOT EXISTS terrain_data (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  grid_width INTEGER NOT NULL DEFAULT 200,
+  grid_height INTEGER NOT NULL DEFAULT 350,
+  cell_size REAL NOT NULL DEFAULT 2.0,
+  origin_x REAL NOT NULL DEFAULT 0,
+  origin_y REAL NOT NULL DEFAULT 0,
+  heights TEXT NOT NULL DEFAULT '[]',
+  updated_by TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Image layers: uploaded overlay images projected onto the terrain
+CREATE TABLE IF NOT EXISTS image_layers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,             -- image URL (uploaded to R2/external)
+  x REAL DEFAULT 0,              -- center x in farm coords
+  y REAL DEFAULT 0,              -- center y in farm coords
+  width REAL DEFAULT 100,        -- width in farm units
+  height REAL DEFAULT 100,       -- height in farm units
+  rotation REAL DEFAULT 0,       -- degrees
+  opacity REAL DEFAULT 0.5,      -- 0-1
+  visible INTEGER DEFAULT 1,     -- toggle on/off
+  sort_order INTEGER DEFAULT 0,  -- stacking order
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
