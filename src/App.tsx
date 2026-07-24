@@ -10,6 +10,8 @@ import { Login } from '@/pages/Login';
 import { FarmScene } from '@/components/FarmScene';
 import { Sidebar } from '@/components/Sidebar';
 import { NavBar } from '@/components/Toolbar';
+import { LayersPanel } from '@/components/LayersPanel';
+import { TerrainControls } from '@/components/TerrainMesh';
 
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const Vision = lazy(() => import('@/pages/Vision'));
@@ -24,6 +26,7 @@ const EditHistory = lazy(() => import('@/pages/EditHistory'));
  */
 function Dashboard({ visible }: { visible: boolean }) {
   const fetchElements = useStore(s => s.fetchElements);
+  const fetchImageLayers = useStore(s => s.fetchImageLayers);
   const elementsLoading = useStore(s => s.elementsLoading);
   const elements = useStore(s => s.elements);
   const sidebarOpen = useStore(s => s.sidebarOpen);
@@ -34,10 +37,14 @@ function Dashboard({ visible }: { visible: boolean }) {
   const editingElementId = useStore(s => s.editingElementId);
   const exitEditMode = useStore(s => s.exitEditMode);
   const editingElement = elements.find(e => e.id === editingElementId);
+  const user = useStore(s => s.user);
+  const isAdmin = user?.role === 'admin';
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
 
   useEffect(() => {
     fetchElements();
-  }, [fetchElements]);
+    fetchImageLayers();
+  }, [fetchElements, fetchImageLayers]);
 
   // Restore selected element from URL hash on initial load
   useEffect(() => {
@@ -112,6 +119,24 @@ function Dashboard({ visible }: { visible: boolean }) {
           {elements.length} elements
         </div>
       )}
+      {/* Layers panel toggle (admin only) */}
+      {isAdmin && (
+        <button
+          onClick={() => setLayersPanelOpen(!layersPanelOpen)}
+          className={`absolute top-3 right-3 z-20 w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-colors active:scale-95 shadow-lg ${
+            layersPanelOpen
+              ? 'bg-forest-600 text-white'
+              : 'bg-earth-800/90 backdrop-blur text-earth-300 border border-earth-700 hover:bg-earth-700'
+          }`}
+          title={layersPanelOpen ? 'Hide layers' : 'Image layers'}
+        >
+          ◫
+        </button>
+      )}
+      {layersPanelOpen && isAdmin && (
+        <LayersPanel onClose={() => setLayersPanelOpen(false)} />
+      )}
+      {isAdmin && <TerrainControls />}
       {/* Sidebar — handles its own mobile/desktop layout */}
       <Sidebar />
     </div>

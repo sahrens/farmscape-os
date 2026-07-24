@@ -71,6 +71,28 @@ interface FarmStore {
   pushUndo: (elementId: string) => void;
   undoElement: (elementId: string) => Promise<boolean>;
 
+  // Terrain
+  terrainEnabled: boolean;
+  setTerrainEnabled: (enabled: boolean) => void;
+  terrainData: api.TerrainData | null;
+  terrainLoading: boolean;
+  terrainEditMode: boolean;
+  setTerrainEditMode: (active: boolean) => void;
+  terrainBrushMode: 'raise' | 'lower' | 'smooth';
+  setTerrainBrushMode: (mode: 'raise' | 'lower' | 'smooth') => void;
+  terrainBrushSize: number;
+  setTerrainBrushSize: (size: number) => void;
+  fetchTerrain: () => Promise<void>;
+  saveTerrain: (heights: number[]) => Promise<boolean>;
+
+  // Image Layers
+  imageLayers: api.ImageLayer[];
+  imageLayersLoading: boolean;
+  fetchImageLayers: () => Promise<void>;
+  createImageLayer: (layer: Partial<api.ImageLayer>) => Promise<string | null>;
+  updateImageLayer: (id: string, updates: Partial<api.ImageLayer>) => Promise<boolean>;
+  deleteImageLayer: (id: string) => Promise<boolean>;
+
   // Element CRUD
   createElement: (el: Partial<FarmElement>) => Promise<string | null>;
   updateElement: (id: string, updates: Partial<FarmElement>) => Promise<boolean>;
@@ -359,6 +381,86 @@ export const useStore = create<FarmStore>((set, get) => ({
       return true;
     } catch (err) {
       console.error('Failed to persist element:', err);
+      return false;
+    }
+  },
+
+  // Terrain
+  terrainEnabled: false,
+  setTerrainEnabled: (enabled) => set({ terrainEnabled: enabled }),
+  terrainData: null,
+  terrainLoading: false,
+  terrainEditMode: false,
+  setTerrainEditMode: (active) => set({ terrainEditMode: active }),
+  terrainBrushMode: 'raise' as const,
+  setTerrainBrushMode: (mode) => set({ terrainBrushMode: mode }),
+  terrainBrushSize: 3,
+  setTerrainBrushSize: (size) => set({ terrainBrushSize: size }),
+  fetchTerrain: async () => {
+    set({ terrainLoading: true });
+    try {
+      const data = await api.terrain.get();
+      set({ terrainData: data, terrainLoading: false });
+    } catch (err) {
+      console.error('Failed to fetch terrain:', err);
+      set({ terrainLoading: false });
+    }
+  },
+  saveTerrain: async (heights) => {
+    const current = get().terrainData;
+    if (!current) return false;
+    try {
+      await api.terrain.save({ ...current, heights });
+      set({ terrainData: { ...current, heights } });
+      return true;
+    } catch (err) {
+      console.error('Failed to save terrain:', err);
+      return false;
+    }
+  },
+
+  // Image Layers
+  imageLayers: [],
+  imageLayersLoading: false,
+  fetchImageLayers: async () => {
+    set({ imageLayersLoading: true });
+    try {
+      const layers = await api.layers.list();
+      set({ imageLayers: layers, imageLayersLoading: false });
+    } catch (err) {
+      console.error('Failed to fetch image layers:', err);
+      set({ imageLayersLoading: false });
+    }
+  },
+  createImageLayer: async (layer) => {
+    try {
+      const created = await api.layers.create(layer);
+      set(s => ({ imageLayers: [...s.imageLayers, created] }));
+      return created.id;
+    } catch (err) {
+      console.error('Failed to create image layer:', err);
+      return null;
+    }
+  },
+  updateImageLayer: async (id, updates) => {
+    try {
+      const updated = await api.layers.update(id, updates);
+      set(s => ({
+        imageLayers: s.imageLayers.map(l => l.id === id ? updated : l),
+      }));
+      return true;
+    } catch (err) {
+      console.error('Failed to update image layer:', err);
+      return false;
+    }
+  },
+  deleteImageLayer: async (id) => {
+    try {
+      await api.layers.remove(id);
+      set(s => ({ imageLayers: s.imageLayers.filter(l => l.id !== id) }));
+      return true;
+    } catch (err) {
+      console.error('Failed to delete image layer:', err);
       return false;
     }
   },

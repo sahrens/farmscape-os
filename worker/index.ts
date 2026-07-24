@@ -837,6 +837,88 @@ export default {
         return json(results);
       }
 
+      // --- IMAGE LAYERS ---
+      if (path === '/api/layers' && request.method === 'GET') {
+        const { results } = await env.DB.prepare(
+          'SELECT * FROM image_layers ORDER BY sort_order ASC, created_at ASC'
+        ).all();
+        return json(results);
+      }
+
+      if (path === '/api/layers' && request.method === 'POST') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const layer = await request.json() as Record<string, unknown>;
+        const id = layer.id || crypto.randomUUID();
+        await env.DB.prepare(
+          `INSERT INTO image_layers (id, name, url, x, y, width, height, rotation, opacity, visible, sort_order, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(
+          id, layer.name || 'Untitled Layer', layer.url || '',
+          layer.x ?? 0, layer.y ?? 0, layer.width ?? 100, layer.height ?? 100,
+          layer.rotation ?? 0, layer.opacity ?? 0.5, layer.visible ?? 1,
+          layer.sort_order ?? 0, user.id
+        ).run();
+        await logChange(env.DB, 'image_layers', id as string, 'create', user.email, layer);
+        const created = await env.DB.prepare('SELECT * FROM image_layers WHERE id = ?').bind(id).first();
+        return json(created, 201);
+      }
+
+      if (path.match(/^\/api\/layers\/[^/]+$/) && request.method === 'PUT') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const layerId = path.split('/')[3];
+        const updates = await request.json() as Record<string, unknown>;
+        const fields: string[] = [];
+        const values: unknown[] = [];
+        for (const [key, val] of Object.entries(updates)) {
+          if (['name', 'url', 'x', 'y', 'width', 'height', 'rotation', 'opacity', 'visible', 'sort_order'].includes(key)) {
+            fields.push(`${key} = ?`);
+            values.push(val);
+          }
+        }
+        if (fields.length === 0) return json({ error: 'No valid fields' }, 400);
+        fields.push('updated_at = datetime(\'now\')');
+        values.push(layerId);
+        await env.DB.prepare(
+          `UPDATE image_layers SET ${fields.join(', ')} WHERE id = ?`
+        ).bind(...values).run();
+        await logChange(env.DB, 'image_layers', layerId, 'update', user.email, updates);
+        const updated = await env.DB.prepare('SELECT * FROM image_layers WHERE id = ?').bind(layerId).first();
+        return json(updated);
+      }
+
+      if (path.match(/^\/api\/layers\/[^/]+$/) && request.method === 'DELETE') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const layerId = path.split('/')[3];
+        await env.DB.prepare('DELETE FROM image_layers WHERE id = ?').bind(layerId).run();
+        await logChange(env.DB, 'image_layers', layerId, 'delete', user.email, null);
+        return json({ ok: true });
+      }
+
+      // --- TERRAIN ---
+      if (path === '/api/terrain' && request.method === 'GET') {
+        const row = await env.DB.prepare('SELECT * FROM terrain_data WHERE id = ?').bind('default').first();
+        if (!row) return json({ id: 'default', grid_width: 200, grid_height: 350, cell_size: 2.0, origin_x: 0, origin_y: 0, heights: [] });
+        return json({ ...row, heights: JSON.parse((row.heights as string) || '[]') });
+      }
+
+      if (path === '/api/terrain' && request.method === 'PUT') {
+        if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+        const data = await request.json() as Record<string, unknown>;
+        const heights = JSON.stringify(data.heights || []);
+        await env.DB.prepare(
+          `INSERT INTO terrain_data (id, grid_width, grid_height, cell_size, origin_x, origin_y, heights, updated_by, updated_at)
+           VALUES ('default', ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(id) DO UPDATE SET
+             grid_width=excluded.grid_width, grid_height=excluded.grid_height,
+             cell_size=excluded.cell_size, origin_x=excluded.origin_x, origin_y=excluded.origin_y,
+             heights=excluded.heights, updated_by=excluded.updated_by, updated_at=excluded.updated_at`
+        ).bind(
+          data.grid_width ?? 200, data.grid_height ?? 350, data.cell_size ?? 2.0,
+          data.origin_x ?? 0, data.origin_y ?? 0, heights, user.email
+        ).run();
+        return json({ ok: true });
+      }
+
       // --- ACTIVITIES ---
       if (path === '/api/activities' && request.method === 'GET') {
         const elementId = url.searchParams.get('element_id');
