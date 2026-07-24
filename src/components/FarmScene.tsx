@@ -91,6 +91,9 @@ function Ground() {
 
 // Image layer overlay — textured plane projected on ground
 function ImageLayerPlane({ layer }: { layer: import('@/lib/api').ImageLayer }) {
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
+
   const texture = useMemo(() => {
     if (!layer.url) return null;
     const tex = new THREE.TextureLoader().load(layer.url);
@@ -98,10 +101,80 @@ function ImageLayerPlane({ layer }: { layer: import('@/lib/api').ImageLayer }) {
     return tex;
   }, [layer.url]);
 
+  // Build a terrain-conforming geometry for this layer's extent
+  const projectedGeo = useMemo(() => {
+    if (!terrainEnabled || !terrainData || !terrainData.heights.length) return null;
+
+    const { grid_width: gW, grid_height: gH, cell_size: cs, origin_x: ox, origin_y: oy, heights } = terrainData;
+    if (heights.length !== gW * gH) return null;
+
+    // Layer bounds in farm coords
+    const halfW = layer.width / 2;
+    const halfH = layer.height / 2;
+    const lMinX = layer.x - halfW;
+    const lMaxX = layer.x + halfW;
+    const lMinY = layer.y - halfH;
+    const lMaxY = layer.y + halfH;
+
+    // Determine grid cells that overlap this layer
+    const gxMin = Math.max(0, Math.floor((lMinX - ox) / cs));
+    const gxMax = Math.min(gW - 1, Math.ceil((lMaxX - ox) / cs));
+    const gyMin = Math.max(0, Math.floor((lMinY - oy) / cs));
+    const gyMax = Math.min(gH - 1, Math.ceil((lMaxY - oy) / cs));
+
+    const segW = gxMax - gxMin;
+    const segH = gyMax - gyMin;
+    if (segW < 1 || segH < 1) return null;
+
+    // Build a plane with vertices matching the terrain heights in this region
+    const geo = new THREE.PlaneGeometry(layer.width, layer.height, segW, segH);
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+
+    for (let iy = 0; iy <= segH; iy++) {
+      for (let ix = 0; ix <= segW; ix++) {
+        const vi = iy * (segW + 1) + ix;
+        // Grid cell this vertex corresponds to
+        const hx = Math.min(gxMin + ix, gW - 1);
+        const hy = Math.min(gyMin + iy, gH - 1);
+        const h = heights[hy * gW + hx] || 0;
+        // Set Z (which becomes Y after rotation) to the terrain height
+        pos.setZ(vi, h);
+        // UV: map to 0-1 across the layer extent
+        uv.setXY(vi, ix / segW, 1 - iy / segH);
+      }
+    }
+    pos.needsUpdate = true;
+    uv.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }, [terrainEnabled, terrainData, layer.x, layer.y, layer.width, layer.height]);
+
   if (!texture || !layer.visible) return null;
 
   const rotRad = (layer.rotation || 0) * (Math.PI / 180);
+  const yOffset = 0.1 + (layer.sort_order || 0) * 0.01;
 
+  // When terrain is active and we have a projected geometry, use it
+  if (terrainEnabled && projectedGeo) {
+    return (
+      <mesh
+        rotation={[-Math.PI / 2, rotRad, 0]}
+        position={[layer.x, yOffset, -layer.y]}
+        geometry={projectedGeo}
+      >
+        <meshBasicMaterial
+          map={texture}
+          transparent
+          opacity={layer.opacity}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    );
+  }
+
+  // Flat mode (no terrain)
   return (
     <mesh
       rotation={[-Math.PI / 2, rotRad, 0]}
