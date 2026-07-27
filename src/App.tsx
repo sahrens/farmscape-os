@@ -22,6 +22,27 @@ const EditHistory = lazy(() => import('@/pages/EditHistory'));
 const Events = lazy(() => import('@/pages/Events'));
 
 /**
+ * Plan view toggle button — switches between 3D perspective and top-down architectural plan view.
+ */
+function PlanViewToggle() {
+  const planView = useStore(s => s.planView);
+  const setPlanView = useStore(s => s.setPlanView);
+  return (
+    <button
+      onClick={() => setPlanView(!planView)}
+      className={`absolute top-3 left-14 z-20 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors active:scale-95 shadow-lg ${
+        planView
+          ? 'bg-indigo-600 text-white'
+          : 'bg-earth-800/90 backdrop-blur text-earth-300 border border-earth-700 hover:bg-earth-700'
+      }`}
+      title={planView ? 'Switch to 3D view' : 'Switch to plan view'}
+    >
+      {planView ? '3D' : 'Plan'}
+    </button>
+  );
+}
+
+/**
  * Dashboard — 3D map view. Always mounted to avoid Canvas remount/black screen.
  * Hidden via CSS when on other routes.
  */
@@ -120,6 +141,8 @@ function Dashboard({ visible }: { visible: boolean }) {
           {elements.length} elements
         </div>
       )}
+      {/* Plan view toggle */}
+      <PlanViewToggle />
       {/* Layers panel toggle (admin only) */}
       {isAdmin && (
         <button
