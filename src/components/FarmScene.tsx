@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 import { TerrainMesh } from './TerrainMesh';
+import { PlanSymbol, PlanCameraController } from './PlanView';
 
 // ─── Error boundary ───────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: string }
@@ -697,6 +698,7 @@ function CameraController() {
   const clearCameraTarget = useStore(s => s.clearCameraTarget);
   const focusTarget = useStore(s => s.focusTarget);
   const clearFocusTarget = useStore(s => s.clearFocusTarget);
+  const planView = useStore(s => s.planView);
   const editMode = useStore(s => s.editMode);
 
   // Animation state for flyTo
@@ -811,11 +813,12 @@ function CameraController() {
   return (
     <OrbitControls
       ref={controlsRef}
-      maxPolarAngle={Math.PI / 2.1}
+      maxPolarAngle={planView ? 0.01 : Math.PI / 2.1}
+      minPolarAngle={0}
       minDistance={20}
-      maxDistance={1200}
+      maxDistance={planView ? 1500 : 1200}
       enabled={!editMode || !useStore.getState().editingElementId}
-      enableRotate={!editMode}
+      enableRotate={!editMode && !planView}
     />
   );
 }
@@ -888,6 +891,7 @@ function Scene() {
   const editMode = useStore(s => s.editMode);
   const exitEditMode = useStore(s => s.exitEditMode);
   const terrainEnabled = useStore(s => s.terrainEnabled);
+  const planView = useStore(s => s.planView);
 
   const filtered = useMemo(() => {
     return elements.filter(el => {
@@ -911,42 +915,66 @@ function Scene() {
   return (
     <>
       <CameraController />
+      <PlanCameraController />
 
-      {/* Lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[300, 400, 200]}
-        intensity={1.2}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={1500}
-        shadow-camera-left={-500}
-        shadow-camera-right={500}
-        shadow-camera-top={500}
-        shadow-camera-bottom={-500}
-      />
-      <hemisphereLight args={['#87CEEB', '#3a5a2a', 0.3]} />
+      {/* Lighting — flat in plan view, realistic in 3D */}
+      {planView ? (
+        <ambientLight intensity={1.2} />
+      ) : (
+        <>
+          <ambientLight intensity={0.4} />
+          <directionalLight
+            position={[300, 400, 200]}
+            intensity={1.2}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-far={1500}
+            shadow-camera-left={-500}
+            shadow-camera-right={500}
+            shadow-camera-top={500}
+            shadow-camera-bottom={-500}
+          />
+          <hemisphereLight args={['#87CEEB', '#3a5a2a', 0.3]} />
+        </>
+      )}
 
-      {/* Sky */}
-      <mesh>
-        <sphereGeometry args={[1500, 32, 16]} />
-        <meshBasicMaterial color="#5a8ab5" side={THREE.BackSide} />
-      </mesh>
+      {/* Sky — hidden in plan view for clean background */}
+      {!planView && (
+        <mesh>
+          <sphereGeometry args={[1500, 32, 16]} />
+          <meshBasicMaterial color="#5a8ab5" side={THREE.BackSide} />
+        </mesh>
+      )}
+      {/* Plan view background */}
+      {planView && (
+        <mesh>
+          <sphereGeometry args={[1500, 32, 16]} />
+          <meshBasicMaterial color="#f5f0e8" side={THREE.BackSide} />
+        </mesh>
+      )}
 
-      {/* Ground & boundaries */}
-      {terrainEnabled ? <TerrainMesh /> : <Ground />}
+      {/* Ground & boundaries — simplified in plan view */}
+      {!planView && (terrainEnabled ? <TerrainMesh /> : <Ground />)}
+      {planView && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gx, -0.1, gz]}>
+          <planeGeometry args={[gw, gd]} />
+          <meshBasicMaterial color="#f5f0e8" side={THREE.DoubleSide} />
+        </mesh>
+      )}
       <BoundaryLine />
       <OverlayLines />
       <ImageLayers />
 
-      {/* Farm elements */}
-      {filtered.map(el => (
-        <ElementMesh key={el.id} el={el} />
-      ))}
+      {/* Farm elements — show plan symbols OR 3D meshes */}
+      {planView ? (
+        filtered.map(el => <PlanSymbol key={el.id} el={el} />)
+      ) : (
+        filtered.map(el => <ElementMesh key={el.id} el={el} />)
+      )}
 
       {/* Edit gizmo — rendered at scene level, decoupled from element re-renders */}
-      {editMode && <EditGizmo />}
+      {editMode && !planView && <EditGizmo />}
 
       {/* Click on ground to deselect / exit edit mode */}
       <mesh

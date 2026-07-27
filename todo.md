@@ -36,3 +36,6 @@
 - [x] Topo lines: derive and render from heightmap
 - [x] Image layers project onto terrain surface when terrain is active
 - [x] Events page: members-only photo gallery + program PDF for ʻAha Hoʻolaʻa ceremony
+- [x] Plan view mode: toggle between 3D perspective and landscape architecture plan view
+- [x] Plan view: orthographic top-down camera locked to overhead
+- [x] Plan view: architectural plan symbols for each element type (tree canopies, structure footprints, zone hatching, infrastructure lines)

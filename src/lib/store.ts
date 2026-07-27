@@ -71,6 +71,10 @@ interface FarmStore {
   pushUndo: (elementId: string) => void;
   undoElement: (elementId: string) => Promise<boolean>;
 
+  // Plan view (landscape architecture mode)
+  planView: boolean;
+  setPlanView: (enabled: boolean) => void;
+
   // Terrain
   terrainEnabled: boolean;
   setTerrainEnabled: (enabled: boolean) => void;
@@ -385,6 +389,9 @@ export const useStore = create<FarmStore>((set, get) => ({
     }
   },
 
+  // Plan view
+  planView: false,
+  setPlanView: (enabled) => set({ planView: enabled }),
   // Terrain
   terrainEnabled: false,
   setTerrainEnabled: (enabled) => set({ terrainEnabled: enabled }),
