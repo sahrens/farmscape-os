@@ -34,4 +34,5 @@
 - [x] Satellite layer: on-demand tile fetch + stitch → saved as normal image layer
 - [x] Terrain editing: heightmap with push/pull tools (isolated with toggle)
 - [x] Topo lines: derive and render from heightmap
-- [ ] Image layers project onto terrain surface when terrain is active (future: requires shader-based draping)
+- [x] Image layers project onto terrain surface when terrain is active
+- [x] Events page: members-only photo gallery + program PDF for ʻAha Hoʻolaʻa ceremony
