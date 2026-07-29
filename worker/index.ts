@@ -8,6 +8,7 @@ export interface Env {
   DB: D1Database;
   AGENTMAIL_API_KEY: string;
   GITHUB_TOKEN?: string; // TODO: set up fine-grained token for issue creation
+  AI: Ai;                // Cloudflare Workers AI binding
   ASSETS: { fetch: (request: Request) => Promise<Response> };
 }
 
@@ -54,6 +55,89 @@ function sessionCookie(token: string, maxAge = 30 * 24 * 3600): string {
 
 function clearSessionCookie(): string {
   return 'farm_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
+}
+
+
+const oracleCache = new Map<string, { expiresAt: number; value: unknown }>();
+
+function truncateText(value: string, max = 1200): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…`;
+}
+
+function safeJsonParse<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+async function callOracleModel(context: Record<string, unknown>, env: Env) {
+  // Uses Cloudflare Workers AI — no API key required, runs free on the CF network.
+  // Model: llama-3.3-70b-instruct-fp8-fast supports JSON Mode and is the strongest
+  // free text-generation model available on Workers AI.
+  const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+  const systemPrompt =
+    'You are an expert farm operations advisor embedded in a farm management system. ' +
+    'Review the complete farm context and return one clear recommendation for what should happen next. ' +
+    'Put the recommendation front and center, grounded in the evidence. ' +
+    'Favor near-term, concrete, high-leverage actions. ' +
+    'Consider historical momentum, missing foundational work, planned versus active inventory, ' +
+    'recent field activity, and whether the farm is at risk of drifting away from its own plan. ' +
+    'Avoid generic motivational language and avoid recommending more than one top priority. ' +
+    'All JSON fields must be populated. confidence must be a number between 0 and 1. ' +
+    'priority must be exactly one of: medium, high, critical. ' +
+    'next_steps must be an array of 3 to 5 strings. signals must be an array of 3 to 8 strings.';
+
+  const result = await env.AI.run(MODEL, {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: JSON.stringify(context) },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        type: 'object',
+        properties: {
+          top_recommendation: { type: 'string' },
+          recommendation_summary: { type: 'string' },
+          priority: { type: 'string', enum: ['medium', 'high', 'critical'] },
+          confidence: { type: 'number' },
+          next_steps: { type: 'array', items: { type: 'string' } },
+          reasoning: { type: 'string' },
+          signals: { type: 'array', items: { type: 'string' } },
+        },
+        required: [
+          'top_recommendation',
+          'recommendation_summary',
+          'priority',
+          'confidence',
+          'next_steps',
+          'reasoning',
+          'signals',
+        ],
+      },
+    },
+  } as Parameters<typeof env.AI.run>[1]);
+
+  // Workers AI returns { response: string } for text-generation with JSON mode
+  const raw = (result as { response?: string }).response;
+  if (!raw) {
+    throw new Error('Oracle model returned no content.');
+  }
+  const parsed = JSON.parse(raw) as {
+    top_recommendation: string;
+    recommendation_summary: string;
+    priority: 'medium' | 'high' | 'critical';
+    confidence: number;
+    next_steps: string[];
+    reasoning: string;
+    signals: string[];
+  };
+  return parsed;
 }
 
 function getSessionToken(request: Request): string | null {
@@ -1086,7 +1170,135 @@ export default {
         const { results: allElements } = await env.DB.prepare('SELECT * FROM elements WHERE status != ?').bind('removed').all();
         return json({ results, elements: allElements });
       }
+    // =====================
+    // ORACLE
+    // =====================
+    if (path === '/api/oracle' && request.method === 'GET') {
+      if (!isAdmin(user.role)) return json({ error: 'Admin access required' }, 403);
+      const refresh = url.searchParams.get('refresh') === '1';
+      const cacheKey = 'oracle:default';
+      const now = Date.now();
+      const cached = oracleCache.get(cacheKey);
+      if (!refresh && cached && cached.expiresAt > now) {
+        return json(cached.value);
+      }
+
+      const docs = ((env as any).DOCS || {}) as Record<string, string>;
+      const { results: elements } = await env.DB.prepare(
+        `SELECT id, type, subtype, name, status, planted_at, created_at, updated_at, metadata
+         FROM elements
+         WHERE status != 'removed'
+         ORDER BY updated_at DESC, created_at DESC`
+      ).all();
+      const { results: activities } = await env.DB.prepare(
+        `SELECT id, element_id, type, notes, quantity, unit, user_name, duration_minutes, is_test, created_at
+         FROM activities
+         ORDER BY created_at DESC
+         LIMIT 250`
+      ).all();
+      const { results: observations } = await env.DB.prepare(
+        `SELECT id, element_id, type, title, body, value, unit, user_name, is_test, created_at
+         FROM observations
+         ORDER BY created_at DESC
+         LIMIT 250`
+      ).all();
+      const { results: changelog } = await env.DB.prepare(
+        `SELECT id, table_name, row_id, action, author, delta, created_at
+         FROM changelog
+         ORDER BY created_at DESC
+         LIMIT 250`
+      ).all();
+
+      const activeElements = elements.filter((el: any) => el.status === 'active');
+      const plannedElements = elements.filter((el: any) => el.status === 'planned');
+      const realActivities = activities.filter((act: any) => !act.is_test);
+      const realObservations = observations.filter((obs: any) => !obs.is_test);
+      const recentWindow = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
+      const recentActivities = realActivities.filter((act: any) => String(act.created_at || '') >= recentWindow);
+      const recentObservations = realObservations.filter((obs: any) => String(obs.created_at || '') >= recentWindow);
+
+      const countsByType = elements.reduce((acc: Record<string, number>, el: any) => {
+        const key = `${el.type}:${el.status}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+      const countsBySubtype = elements.reduce((acc: Record<string, number>, el: any) => {
+        const key = `${el.subtype || 'unknown'}:${el.status}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+      const activityTypes = realActivities.reduce((acc: Record<string, number>, act: any) => {
+        const key = act.type || 'unknown';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+      const observationTypes = realObservations.reduce((acc: Record<string, number>, obs: any) => {
+        const key = obs.type || 'unknown';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      const context = {
+        generated_at: new Date().toISOString(),
+        totals: {
+          elements: elements.length,
+          active_elements: activeElements.length,
+          planned_elements: plannedElements.length,
+          activities: realActivities.length,
+          observations: realObservations.length,
+          changelog_entries: changelog.length,
+          planning_docs: Object.keys(docs).length,
+        },
+        counts_by_type: countsByType,
+        counts_by_subtype: countsBySubtype,
+        activity_types: activityTypes,
+        observation_types: observationTypes,
+        recent_activity_window_days: 30,
+        recent_activity_count: recentActivities.length,
+        recent_observation_count: recentObservations.length,
+        latest_activities: realActivities.slice(0, 20),
+        latest_observations: realObservations.slice(0, 20),
+        latest_changes: changelog.slice(0, 20).map((entry: any) => ({
+          ...entry,
+          delta: typeof entry.delta === 'string' ? truncateText(entry.delta, 600) : entry.delta,
+        })),
+        active_elements_sample: activeElements.slice(0, 25).map((el: any) => ({
+          ...el,
+          metadata: safeJsonParse(el.metadata, {}),
+        })),
+        planned_elements_sample: plannedElements.slice(0, 25).map((el: any) => ({
+          ...el,
+          metadata: safeJsonParse(el.metadata, {}),
+        })),
+        planning_docs: Object.entries(docs).map(([slug, content]) => ({
+          slug,
+          excerpt: truncateText(String(content), 2000),
+        })),
+      };
+
+      const oracle = await callOracleModel(context, env);
+      const payload = {
+        ...oracle,
+        confidence: Math.max(0, Math.min(1, oracle.confidence)),
+        generated_at: new Date().toISOString(),
+        cached: false,
+        summary: {
+          active_elements: activeElements.length,
+          planned_elements: plannedElements.length,
+          recent_activities: recentActivities.length,
+          recent_observations: recentObservations.length,
+          docs_considered: Object.keys(docs).length,
+        },
+      };
+      oracleCache.set(cacheKey, {
+        expiresAt: now + 1000 * 60 * 60,
+        value: payload,
+      });
+      return json(payload);
     }
+
+    }
+
 
     // =====================
     // BUG REPORTS

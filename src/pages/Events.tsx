@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocation } from 'wouter';
+import farmConfig from '@/farm.config';
 
 /**
  * List of ceremony photos served from /events/ in the public directory.
@@ -51,7 +52,7 @@ export default function Events() {
             Spencer &amp; Eva Kalihiwai
           </p>
           <p className="text-sm text-earth-400 mt-1">
-            Land Blessing Ceremony — Kahiliholo Farm
+            Land Blessing Ceremony — {farmConfig.name}
           </p>
         </header>
 
