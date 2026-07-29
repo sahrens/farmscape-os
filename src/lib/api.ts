@@ -348,3 +348,27 @@ export const docs = {
   get: (slug: string) =>
     request<{ slug: string; content: string }>(`/api/docs/${slug}`),
 };
+
+export interface OracleResponse {
+  top_recommendation: string;
+  recommendation_summary: string;
+  priority: 'medium' | 'high' | 'critical';
+  confidence: number;
+  next_steps: string[];
+  reasoning: string;
+  signals: string[];
+  generated_at: string;
+  cached: boolean;
+  summary: {
+    active_elements: number;
+    planned_elements: number;
+    recent_activities: number;
+    recent_observations: number;
+    docs_considered: number;
+  };
+}
+
+export const oracle = {
+  get: (refresh = false) =>
+    request<OracleResponse>(`/api/oracle${refresh ? '?refresh=1' : ''}`),
+};

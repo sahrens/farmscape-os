@@ -24,6 +24,7 @@ export function NavBar() {
   const isFieldwork = location === '/fieldwork';
   const isMembers = location === '/members';
   const isEvents = location === '/events';
+  const isOracle = location === '/oracle';
   const isAdmin = user?.role === 'admin';
 
   const activeCount = elements.filter(e => e.status === 'active').length;
@@ -68,6 +69,11 @@ export function NavBar() {
           {user && (
             <button onClick={() => setLocation('/events')} className={linkClass(isEvents)}>
               Events
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => setLocation('/oracle')} className={linkClass(isOracle)}>
+              Oracle
             </button>
           )}
           {isAdmin && (

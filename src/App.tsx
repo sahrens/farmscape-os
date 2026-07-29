@@ -20,6 +20,7 @@ const Members = lazy(() => import('@/pages/Members'));
 const AdminDocs = lazy(() => import('@/pages/AdminDocs'));
 const EditHistory = lazy(() => import('@/pages/EditHistory'));
 const Events = lazy(() => import('@/pages/Events'));
+const Oracle = lazy(() => import('@/pages/Oracle'));
 
 /**
  * Plan view toggle button — switches between 3D perspective and top-down architectural plan view.
@@ -282,6 +283,7 @@ export default function App() {
               <Route path="/data" component={DataExplorer} />
               <Route path="/vision" component={Vision} />
               <Route path="/fieldwork" component={Fieldwork} />
+              <Route path="/oracle" component={Oracle} />
               <Route path="/members" component={Members} />
               <Route path="/docs" component={AdminDocs} />
               <Route path="/history" component={EditHistory} />
