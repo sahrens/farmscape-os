@@ -18,6 +18,12 @@ export function TerrainMesh() {
   const terrainData = useStore(s => s.terrainData);
   const saveTerrain = useStore(s => s.saveTerrain);
   const terrainEditMode = useStore(s => s.terrainEditMode);
+  const imageLayers = useStore(s => s.imageLayers);
+  // When image layers are visible they form the ground surface (draped onto
+  // this terrain), so the plain surface mesh is skipped — it would only
+  // double up with the layers. The mesh comes back in edit mode, where the
+  // brush needs it, and the topo lines always stay.
+  const layersCoverGround = !terrainEditMode && imageLayers.some(l => l.visible);
   const terrainBrushMode = useStore(s => s.terrainBrushMode);
   const terrainBrushSize = useStore(s => s.terrainBrushSize);
 
@@ -232,23 +238,25 @@ export function TerrainMesh() {
 
   return (
     <group>
-      {/* Terrain mesh */}
-      <mesh
-        ref={meshRef}
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[originX + totalW / 2, 0, -(originY + totalH / 2)]}
-        onPointerDown={handlePointerDown as unknown as (e: THREE.Event) => void}
-        onPointerUp={handlePointerUp}
-        receiveShadow
-      >
-        <planeGeometry ref={geoRef} args={[totalW, totalH, gridW, gridH]} />
-        <meshStandardMaterial
-          color="#4a7a3a"
-          wireframe={terrainEditMode}
-          side={THREE.DoubleSide}
-          flatShading
-        />
-      </mesh>
+      {/* Terrain mesh (skipped while image layers cover the ground) */}
+      {!layersCoverGround && (
+        <mesh
+          ref={meshRef}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[originX + totalW / 2, 0, -(originY + totalH / 2)]}
+          onPointerDown={handlePointerDown as unknown as (e: THREE.Event) => void}
+          onPointerUp={handlePointerUp}
+          receiveShadow
+        >
+          <planeGeometry ref={geoRef} args={[totalW, totalH, gridW, gridH]} />
+          <meshStandardMaterial
+            color="#4a7a3a"
+            wireframe={terrainEditMode}
+            side={THREE.DoubleSide}
+            flatShading
+          />
+        </mesh>
+      )}
 
       {/* Topo contour lines */}
       {topoLines && topoLines.map((line, i) => (

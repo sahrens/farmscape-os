@@ -959,6 +959,7 @@ function Scene() {
   const exitEditMode = useStore(s => s.exitEditMode);
   const terrainEnabled = useStore(s => s.terrainEnabled);
   const planView = useStore(s => s.planView);
+  const imageLayers = useStore(s => s.imageLayers);
 
   const filtered = useMemo(() => {
     return elements.filter(el => {
@@ -1022,7 +1023,11 @@ function Scene() {
       )}
 
       {/* Ground & boundaries — simplified in plan view */}
-      {!planView && (terrainEnabled ? <TerrainMesh /> : <Ground />)}
+      {/* Plain ground only when no image layer covers it (TerrainMesh
+          applies the same rule to its own surface while terrain is on) */}
+      {!planView && (terrainEnabled
+        ? <TerrainMesh />
+        : !imageLayers.some(l => l.visible) && <Ground />)}
       {planView && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gx, -0.1, gz]}>
           <planeGeometry args={[gw, gd]} />
