@@ -25,8 +25,11 @@ export function isTerrainReady(data: TerrainData | null | undefined): data is Te
 
 /**
  * Bilinearly interpolated terrain height at farm coordinates (x, y).
- * Returns 0 when there is no usable terrain data or the point lies
- * outside the grid, so callers can use it unconditionally.
+ * Returns 0 when there is no usable terrain data. Points outside the grid
+ * clamp to the nearest edge height, so a layer that extends past the grid
+ * continues outward at the edge elevation instead of snapping to 0 — most
+ * of a real terrain sits below its reference elevation, and the snap
+ * otherwise wraps the scene in a raised rim.
  */
 export function sampleTerrainHeight(
   data: TerrainData | null | undefined,
@@ -36,9 +39,8 @@ export function sampleTerrainHeight(
   if (!isTerrainReady(data)) return 0;
   const { grid_width: gW, grid_height: gH, cell_size: cs, origin_x: ox, origin_y: oy, heights } = data;
 
-  const fx = (x - ox) / cs;
-  const fy = (y - oy) / cs;
-  if (fx < 0 || fy < 0 || fx > gW - 1 || fy > gH - 1) return 0;
+  const fx = Math.min(Math.max((x - ox) / cs, 0), gW - 1);
+  const fy = Math.min(Math.max((y - oy) / cs, 0), gH - 1);
 
   const x0 = Math.floor(fx);
   const y0 = Math.floor(fy);

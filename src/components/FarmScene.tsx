@@ -356,22 +356,25 @@ function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
     <group
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
-      <mesh position={[0, h * 0.35, 0]} castShadow>
+      {/* Trees cast no shadows: the canopies are translucent, and three.js
+          shadow depth ignores opacity — they would stamp solid discs and
+          spikes on the ground. Structures still cast. */}
+      <mesh position={[0, h * 0.35, 0]}>
         <cylinderGeometry args={[isPalm ? 0.5 : 1, isPalm ? 0.8 : 1.5, h * 0.7, 8]} />
         <meshStandardMaterial color="#8B6914" transparent opacity={isPlanned ? 0.5 : 1} />
       </mesh>
       {isPine ? (
-        <mesh position={[0, h * 0.65, 0]} castShadow>
+        <mesh position={[0, h * 0.65, 0]}>
           <coneGeometry args={[canopy * 0.4, h * 0.6, 8]} />
           <meshStandardMaterial color={color} transparent opacity={isPlanned ? 0.4 : 0.9} />
         </mesh>
       ) : isPalm ? (
-        <mesh position={[0, h * 0.85, 0]} castShadow>
+        <mesh position={[0, h * 0.85, 0]}>
           <sphereGeometry args={[canopy * 0.6, 8, 6]} />
           <meshStandardMaterial color={color} transparent opacity={isPlanned ? 0.4 : 0.9} />
         </mesh>
       ) : (
-        <mesh position={[0, h * 0.7, 0]} castShadow>
+        <mesh position={[0, h * 0.7, 0]}>
           <sphereGeometry args={[canopy, 12, 8]} />
           <meshStandardMaterial color={color} transparent opacity={isPlanned ? 0.4 : 0.9} />
         </mesh>
