@@ -350,7 +350,7 @@ function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
   const color = getColor(el);
   const isPlanned = el.status === 'planned';
   const isPalm = el.subtype === 'royal_palm' || el.subtype === 'palm';
-  const isPine = el.subtype === 'cook_pine' || el.subtype === 'pine' || el.subtype === 'conifer';
+  const isPine = el.subtype === 'cook_pine' || el.subtype === 'pine' || el.subtype === 'conifer' || el.subtype === 'ironwood';
 
   return (
     <group

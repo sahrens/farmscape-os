@@ -11,7 +11,6 @@ import { FarmScene } from '@/components/FarmScene';
 import { Sidebar } from '@/components/Sidebar';
 import { NavBar } from '@/components/Toolbar';
 import { LayersPanel } from '@/components/LayersPanel';
-import { TerrainControls } from '@/components/TerrainMesh';
 
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const Vision = lazy(() => import('@/pages/Vision'));
@@ -50,6 +49,8 @@ function PlanViewToggle() {
 function Dashboard({ visible }: { visible: boolean }) {
   const fetchElements = useStore(s => s.fetchElements);
   const fetchImageLayers = useStore(s => s.fetchImageLayers);
+  const fetchTerrain = useStore(s => s.fetchTerrain);
+  const terrainEnabled = useStore(s => s.terrainEnabled);
   const elementsLoading = useStore(s => s.elementsLoading);
   const elements = useStore(s => s.elements);
   const sidebarOpen = useStore(s => s.sidebarOpen);
@@ -67,7 +68,8 @@ function Dashboard({ visible }: { visible: boolean }) {
   useEffect(() => {
     fetchElements();
     fetchImageLayers();
-  }, [fetchElements, fetchImageLayers]);
+    if (terrainEnabled) fetchTerrain();
+  }, [fetchElements, fetchImageLayers, fetchTerrain, terrainEnabled]);
 
   // Restore selected element from URL hash on initial load
   useEffect(() => {
@@ -161,7 +163,6 @@ function Dashboard({ visible }: { visible: boolean }) {
       {layersPanelOpen && isAdmin && (
         <LayersPanel onClose={() => setLayersPanelOpen(false)} />
       )}
-      {isAdmin && <TerrainControls />}
       {/* Sidebar — handles its own mobile/desktop layout */}
       <Sidebar />
     </div>

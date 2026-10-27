@@ -392,8 +392,8 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Plan view
   planView: false,
   setPlanView: (enabled) => set({ planView: enabled }),
-  // Terrain
-  terrainEnabled: false,
+  // Terrain (on by default; layers and elements project onto it)
+  terrainEnabled: true,
   setTerrainEnabled: (enabled) => set({ terrainEnabled: enabled }),
   terrainData: null,
   terrainLoading: false,
