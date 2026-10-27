@@ -22,7 +22,7 @@
 - [x] Fix: rewrite drag to be purely imperative Three.js (no store updates during drag, only on pointer up)
 - [x] Fix drag offset jump — pin should track touch point exactly, element stays under pin
 - [x] Make drag pin taller
-- [x] Switch login/invite/bug-report emails from Resend to AgentMail with sender name "Farmscape-OS - ***REMOVED*** Farm"
+- [x] Switch login/invite/bug-report emails from Resend to AgentMail with a deployment-configured sender name
 - [x] Fix AgentMail API usage — already using body_text correctly
 - [x] Update README and documentation files for context survival across compaction
 - [x] Fix drag offset bug: position/rotation on outer group, inner components at relative origin
@@ -35,7 +35,7 @@
 - [x] Terrain editing: heightmap with push/pull tools (isolated with toggle)
 - [x] Topo lines: derive and render from heightmap
 - [x] Image layers project onto terrain surface when terrain is active
-- [x] Events page: members-only photo gallery + program PDF for ʻAha Hoʻolaʻa ceremony
+- [x] Events page: members-only photo gallery + program PDF for farm events
 - [x] Plan view mode: toggle between 3D perspective and landscape architecture plan view
 - [x] Plan view: orthographic top-down camera locked to overhead
 - [x] Plan view: architectural plan symbols for each element type (tree canopies, structure footprints, zone hatching, infrastructure lines)

@@ -42,3 +42,7 @@ id_ed25519*
 db-snapshots/
 src/farms/*.config.ts
 !src/farms/example.config.ts
+src/farms/local.config.ts
+public/events/*
+!public/events/.gitkeep
+!public/events/README.md

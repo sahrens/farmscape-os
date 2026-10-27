@@ -12,13 +12,21 @@
  *   ln -s ../../../your-farm.config.ts farmscape-os/src/farms/local.config.ts
  */
 
+import type { FarmConfig } from './farm.config.types';
+import exampleConfig from './farms/example.config';
+
 // Re-export types for convenience
 export type { FarmConfig } from './farm.config.types';
 export { DEFAULT_COLORS } from './farm.config.types';
 
-// Direct import — Vite follows symlinks for regular imports.
-// If local.config.ts doesn't exist, the build will fall through to example.
-// To switch configs, just create/remove the symlink or file.
-import config from './farms/local.config';
+// Vite resolves the optional local config at build time. When
+// src/farms/local.config.ts is absent (e.g. a fresh clone of this repo),
+// the glob is empty and we fall back to the example config.
+const localModules = import.meta.glob<{ default: FarmConfig }>('./farms/local.config.ts', {
+  eager: true,
+});
+const localConfig = Object.values(localModules)[0]?.default;
+
+const config: FarmConfig = localConfig ?? exampleConfig;
 
 export default config;

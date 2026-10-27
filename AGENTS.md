@@ -17,7 +17,7 @@ You MUST NOT commit, push, or add any of the following to this repository:
 
 ### Where private content belongs
 
-All private, farm-specific, or sensitive content belongs in the **private deployment wrapper repository** (e.g., `kahiliholo-farm`), which:
+All private, farm-specific, or sensitive content belongs in the **private deployment wrapper repository** (your own private repo for your farm), which:
 - Is a private GitHub repo
 - Uses this repo as a git submodule
 - Contains farm-specific configs, business docs, and deployment secrets

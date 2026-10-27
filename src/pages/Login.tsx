@@ -229,7 +229,7 @@ export function Login() {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="w-full px-4 py-3 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent"
-                placeholder="e.g. Spencer"
+                placeholder="e.g. Alex"
                 autoFocus
               />
               {error && (

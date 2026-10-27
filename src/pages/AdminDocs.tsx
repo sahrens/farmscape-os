@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { marked } from 'marked';
 import { useStore } from '@/lib/store';
 import * as api from '@/lib/api';
+import { useRoute } from 'wouter';
 
 /**
  * AdminDocs — Generic admin-only document viewer.
@@ -16,17 +17,29 @@ export default function AdminDocs() {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [, params] = useRoute('/docs/:slug');
+  const urlSlug = (params as any)?.slug;
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
     api.docs.list()
       .then(list => {
         setDocList(list);
-        if (list.length > 0) setSelected(list[0].slug);
+        if (list.length > 0) {
+          if (urlSlug && list.some(d => d.slug === urlSlug)) setSelected(urlSlug);
+          else setSelected(list[0].slug);
+        }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, urlSlug]);
+
+  // Handle direct /docs/:slug navigation after initial load
+  useEffect(() => {
+    if (urlSlug && docList.length > 0 && docList.some(d => d.slug === urlSlug) && selected !== urlSlug) {
+      setSelected(urlSlug);
+    }
+  }, [urlSlug, docList]);
 
   useEffect(() => {
     if (!selected) return;

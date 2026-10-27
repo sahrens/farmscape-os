@@ -166,7 +166,7 @@ Auth uses email OTP magic links sent via AgentMail. You need an AgentMail API ke
 printf 'am_us_yourkey' | npx wrangler secret put AGENTMAIL_API_KEY
 ```
 
-Update the inbox address in `worker/index.ts` if you use a different inbox than the default (`***REMOVED***`).
+Set the `MAIL_FROM_ADDRESS` Worker var to your AgentMail inbox address (this is also the sender address for outgoing mail), and optionally set `FARM_NAME` to your farm's display name and `BUG_REPORT_EMAIL` to the address that should receive bug-report notifications.
 
 > **Note:** After setting a secret on a newly created worker, you must redeploy (`npx wrangler deploy`) for the secret to take effect.
 

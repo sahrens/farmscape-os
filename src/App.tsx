@@ -206,7 +206,7 @@ function NameSetup() {
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full px-4 py-3 bg-earth-900 border border-earth-600 rounded-lg text-earth-100 placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent"
-              placeholder="e.g. Spencer"
+              placeholder="e.g. Alex"
               autoFocus
             />
             {error && <p className="mt-2 text-sm text-sunset-400">{error}</p>}
@@ -286,6 +286,7 @@ export default function App() {
               <Route path="/oracle" component={Oracle} />
               <Route path="/members" component={Members} />
               <Route path="/docs" component={AdminDocs} />
+              <Route path="/docs/:slug" component={AdminDocs} />
               <Route path="/history" component={EditHistory} />
               <Route path="/events" component={Events} />
             </Switch>

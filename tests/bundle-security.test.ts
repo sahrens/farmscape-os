@@ -60,13 +60,12 @@ describe("Bundle Security", () => {
   });
 
   it("should not contain private email addresses", () => {
-    const FORBIDDEN = [
-      "spencer.ahrens@gmail.com",
-      "eva.sahrens@gmail.com",
-    ];
-    for (const s of FORBIDDEN) {
-      expect(bundleContent.toLowerCase()).not.toContain(s.toLowerCase());
-    }
+    // Personal addresses are deployment-specific, so this repo's test
+    // asserts the generic property instead: no personal Gmail addresses
+    // (the mail provider used by the deployment this was extracted from)
+    // may appear in the bundle. Deployments can extend this with their
+    // own literal addresses in their private test setup.
+    expect(bundleContent).not.toMatch(/[a-z0-9._%+-]+@gmail\.com/i);
   });
 
   it("should not contain Resend API keys", () => {
@@ -89,17 +88,34 @@ describe("Bundle Security", () => {
   });
 
   it("farm config should be the only file with farm-specific names", () => {
-    // The farm config is intentionally bundled with farm-specific data.
-    // But NO other bundle file should contain "kahiliholo" — that would
+    // The sentinel is the farm `name` from the deployment's local config.
+    // The farm config is intentionally bundled with farm-specific data, but
+    // NO other bundle file should contain the farm name — that would
     // indicate a source path leak or accidental import.
+    //
+    // This repo ships no local config (src/farms/local.config.ts is
+    // gitignored and provided by each deployment). When it is absent there
+    // is no farm-specific name in the source tree, so this check passes
+    // trivially: the bundle can only contain the generic example config.
+    const localConfigPath = join(__dirname, "..", "src", "farms", "local.config.ts");
+    let sentinel: string | null = null;
+    if (existsSync(localConfigPath)) {
+      const match = readFileSync(localConfigPath, "utf-8").match(
+        /name:\s*['"]([^'"]+)['"]/
+      );
+      sentinel = match?.[1] ?? null;
+    }
+    if (!sentinel) return; // no local farm config → nothing farm-specific to leak
+
+    const needle = sentinel.toLowerCase();
     const nonConfigFiles = bundleFiles.filter(
       (f) => !f.name.startsWith("farm.config")
     );
     for (const file of nonConfigFiles) {
-      const has***REMOVED*** = file.content.toLowerCase().includes("kahiliholo");
+      const hasSentinel = file.content.toLowerCase().includes(needle);
       expect(
-        has***REMOVED***,
-        `"kahiliholo" found in ${file.name} — should only be in farm.config chunk`
+        hasSentinel,
+        `"${sentinel}" found in ${file.name} — should only be in farm.config chunk`
       ).toBe(false);
     }
   });

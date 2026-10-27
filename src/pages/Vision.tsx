@@ -1,8 +1,17 @@
 import { useState, useRef, useCallback } from 'react';
+import { marked } from 'marked';
 import farmConfig from '@/farm.config';
 import { DonationBanner } from '@/components/DonationBanner';
 
-const CDN = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663345748967/Pm5jx5ySBXXcq8KhZzi9vg';
+/**
+ * Vision page — fully config-driven.
+ *
+ * This open-source repo ships no vision content. Each deployment supplies
+ * its own through its local farm config (`vision` in
+ * `src/farms/local.config.ts`): an optional markdown intro and optional
+ * before/after comparison sliders. With no vision content configured, the
+ * page renders the farm identity plus a short setup note.
+ */
 
 interface ComparisonSlide {
   title: string;
@@ -10,51 +19,6 @@ interface ComparisonSlide {
   before: string;
   after: string;
 }
-
-const COMPARISONS: ComparisonSlide[] = [
-  {
-    title: 'Aerial View — Food Forest Canopy',
-    desc: 'Breadfruit canopy with vanilla on living tutors, banana, and understory crops replace the open pasture. A drying shade for vanilla curing sits near the garage.',
-    after: `${CDN}/concept-01_10aa161c.jpg`,
-    before: `${CDN}/original-01_f4598322.jpg`,
-  },
-  {
-    title: 'Mountain View — Breadfruit Orchard',
-    desc: 'Organized rows of breadfruit and vanilla fill the foreground, framed by the dramatic ***REMOVED*** mountains. The ranch house sits nestled among productive plantings.',
-    after: `${CDN}/concept-02_a9866b1d.jpg`,
-    before: `${CDN}/original-05_c698052a.jpg`,
-  },
-  {
-    title: 'Cottage View — Immersive Food Forest',
-    desc: 'Walking through the farm at eye level: breadfruit overhead, vanilla vines climbing tutor posts, taro and ginger below, with a rustic farm stand for fresh harvest.',
-    after: `${CDN}/concept-03_9100d9e9.jpg`,
-    before: `${CDN}/original-19_a7589699.jpg`,
-  },
-  {
-    title: 'Guesthouse — Kitchen Garden & Vanilla Rows',
-    desc: 'The guesthouse cottage surrounded by raised herb beds, vanilla on posts, and breadfruit canopy, with the mountains as a stunning backdrop.',
-    after: `${CDN}/concept-04_d0ef9b66.jpg`,
-    before: `${CDN}/original-25_b91e6e8d.jpg`,
-  },
-  {
-    title: 'Aerial View — Three Mandala Gardens',
-    desc: 'Kitchen garden near the house, market garden in the central pasture, and specialty garden near the vanilla shade house. Young breadfruit trees planted in curved rows between the mandalas.',
-    after: `${CDN}/concept-05-mandala-aerial_3221d81a.jpg`,
-    before: `${CDN}/original-01_f4598322.jpg`,
-  },
-  {
-    title: 'Ground Level — Kitchen Garden Pagoda',
-    desc: 'Standing inside the kitchen mandala: raised beds of lettuce, beets, carrots, and herbs radiating from a wooden pagoda, with Norfolk pines and Kauai mountains beyond.',
-    after: `${CDN}/concept-06-mandala-ground_787170ae.jpg`,
-    before: `${CDN}/original-05_c698052a.jpg`,
-  },
-  {
-    title: 'Overhead — Market Garden Fountain',
-    desc: 'Drone view of the 8-bed market mandala: baby greens, rainbow carrots, Japanese cucumbers, and beets radiating from a stone fountain, ringed by lemongrass and marigolds.',
-    after: `${CDN}/concept-07-mandala-fountain_e6f32e09.jpg`,
-    before: `${CDN}/original-01_f4598322.jpg`,
-  },
-];
 
 function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -135,7 +99,35 @@ function ComparisonSlider({ slide }: { slide: ComparisonSlide }) {
   );
 }
 
+/** Derive a /docs route slug from a markdown file path (generic). */
+function docSlug(path: string): string {
+  const file = path.split('/').pop() ?? path;
+  return file.replace(/\.md$/, '').replace(/_+/g, '-').toLowerCase();
+}
+
+/** Render config-supplied markdown, normalizing relative asset/doc links. */
+function renderMarkdown(md: string): string {
+  let rendered = marked.parse(md, { async: false, mangle: false, headerIds: false } as any) as unknown as string;
+  // Fix relative image paths for Workers: ./assets/ -> /assets/ , ./concepts/ -> /concepts/, etc.
+  rendered = rendered.replace(/src="\.\/assets\//g, 'src="/assets/').replace(/src="assets\//g, 'src="/assets/').replace(/src="\.\/concepts\//g, 'src="/concepts/').replace(/src="concepts\//g, 'src="/concepts/');
+  // Fix relative doc links -> internal /docs/{slug} routes, preserving hash fragments
+  const toDocRoute = (_: string, p: string, hash: string | undefined) =>
+    `href="/docs/${docSlug(p)}${hash || ''}"`;
+  rendered = rendered.replace(/href="\.\/docs\/([^"]+?\.md)(#[^"]*)?"/g, toDocRoute);
+  rendered = rendered.replace(/href="docs\/([^"]+?\.md)(#[^"]*)?"/g, toDocRoute);
+  // External https links open in new tab
+  rendered = rendered.replace(/href="https:\/\//g, 'target="_blank" rel="noopener" href="https://');
+  // Make tables horizontally scrollable on small screens
+  rendered = rendered.replace(/<table>/g, '<div class="table-scroll"><table>').replace(/<\/table>/g, '</table></div>');
+  return rendered;
+}
+
 function Vision() {
+  const vision = farmConfig.vision;
+  const comparisons: ComparisonSlide[] = vision?.comparisons ?? [];
+  const introHtml = vision?.introMarkdown ? renderMarkdown(vision.introMarkdown) : null;
+  const hasContent = introHtml !== null || comparisons.length > 0;
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-earth-900 text-earth-100">
       {/* Hero */}
@@ -149,20 +141,29 @@ function Vision() {
         {farmConfig.address && (
           <p className="text-earth-500 text-sm">{farmConfig.address}</p>
         )}
-        <p className="max-w-2xl mx-auto mt-6 text-earth-300 leading-relaxed">
-          A vision for transforming 5 acres of former horse pasture into a thriving
-          biodynamic agroforestry system anchored by vanilla and breadfruit, with layered
-          permaculture plantings of banana, cacao, turmeric, taro, and more.
-          Drag the slider to see the transformation.
-        </p>
+        {introHtml && (
+          <article className="max-w-2xl mx-auto mt-6 text-left doc-content" dangerouslySetInnerHTML={{ __html: introHtml }} />
+        )}
+        {!hasContent && (
+          <p className="max-w-2xl mx-auto mt-6 text-earth-400 text-sm leading-relaxed">
+            No vision content has been configured for this farm yet. To add an
+            introduction and before/after comparisons, provide a{' '}
+            <code className="bg-earth-800 px-1.5 py-0.5 rounded text-earth-200">vision</code>{' '}
+            section in your local farm config (
+            <code className="bg-earth-800 px-1.5 py-0.5 rounded text-earth-200">src/farms/local.config.ts</code>
+            ).
+          </p>
+        )}
       </div>
 
       {/* Comparison sliders */}
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-12">
-        {COMPARISONS.map((slide, i) => (
-          <ComparisonSlider key={i} slide={slide} />
-        ))}
-      </div>
+      {comparisons.length > 0 && (
+        <div className="max-w-3xl mx-auto px-4 py-8 space-y-12">
+          {comparisons.map((slide, i) => (
+            <ComparisonSlider key={i} slide={slide} />
+          ))}
+        </div>
+      )}
 
       {/* Donation */}
       <div className="max-w-3xl mx-auto px-4 pb-8">
@@ -182,6 +183,51 @@ function Vision() {
           </a>
         </p>
       </div>
+      <style>{`
+        .doc-content {
+          color: var(--color-earth-200, #d4c8b8);
+          line-height: 1.7;
+          font-size: 0.9rem;
+        }
+        .doc-content h1 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: var(--color-forest-300, #86c98a);
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid var(--color-earth-700, #3d3528);
+        }
+        .doc-content h2 {
+          font-size: 1.2rem;
+          font-weight: 600;
+          color: var(--color-forest-300, #86c98a);
+          margin: 2rem 0 0.75rem 0;
+        }
+        .doc-content h3 {
+          font-size: 1.05rem;
+          font-weight: 500;
+          color: var(--color-earth-100, #f0e8dc);
+          margin: 1.5rem 0 0.5rem 0;
+        }
+        .doc-content p { margin: 0.75rem 0; }
+        .doc-content strong { color: var(--color-earth-100, #f0e8dc); }
+        .doc-content hr { border: none; border-top: 1px solid var(--color-earth-700, #3d3528); margin: 2rem 0; }
+        .doc-content ul { margin: 0.75rem 0; padding-left: 1.5rem; }
+        .doc-content li { margin: 0.35rem 0; }
+        .doc-content li::marker { color: var(--color-earth-500, #7a6f62); }
+        .doc-content blockquote { border-left: 3px solid var(--color-forest-600, #4a7a3a); padding: 0.5rem 1rem; margin: 1rem 0; background: var(--color-earth-800, #2a2419); font-style: italic; color: var(--color-earth-200, #d4c8b8); }
+        .doc-content a { color: var(--color-forest-300, #86c98a); text-decoration: underline; text-underline-offset: 2px; }
+        .doc-content a:hover { color: var(--color-forest-200, #a8d5aa); }
+        .doc-content img { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+        .doc-content .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; border: 1px solid var(--color-earth-700, #3d3528); border-radius: 6px; }
+        .doc-content table { border-collapse: collapse; font-size: 0.8rem; width: 100%; min-width: max-content; }
+        .doc-content tr { border-bottom: 1px solid var(--color-earth-700, #3d3528); }
+        .doc-content tr:last-child { border-bottom: none; }
+        .doc-content th { padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: var(--color-earth-100, #f0e8dc); background: var(--color-earth-800, #2a2419); border-bottom: 2px solid var(--color-earth-600, #5a5044); white-space: nowrap; }
+        .doc-content td { padding: 0.5rem 0.75rem; color: var(--color-earth-200, #d4c8b8); }
+        .doc-content code { background: var(--color-earth-800, #2a2419); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.8rem; }
+        @media (max-width: 640px) { .doc-content { font-size: 0.85rem; } .doc-content h1 { font-size: 1.3rem; } .doc-content h2 { font-size: 1.1rem; } }
+      `}</style>
     </div>
   );
 }

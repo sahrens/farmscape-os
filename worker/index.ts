@@ -10,6 +10,27 @@ export interface Env {
   GITHUB_TOKEN?: string; // TODO: set up fine-grained token for issue creation
   AI: Ai;                // Cloudflare Workers AI binding
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  // Deployment identity — set as Worker vars in your own deployment.
+  // This open-source worker ships no property-specific values.
+  FARM_NAME?: string;         // Display name used in outgoing email; defaults to 'Farmscape-OS'
+  MAIL_FROM_ADDRESS?: string; // AgentMail inbox / sender address for outgoing email
+  BUG_REPORT_EMAIL?: string;  // Where bug-report notifications are sent (optional)
+}
+
+// --- Deployment identity helpers ---
+function getFarmName(env: Env): string {
+  return env.FARM_NAME || 'Farmscape-OS';
+}
+
+function getMailFrom(env: Env): string {
+  const address = env.MAIL_FROM_ADDRESS || 'noreply@example.com';
+  const name = env.FARM_NAME ? `Farmscape-OS - ${env.FARM_NAME}` : 'Farmscape-OS';
+  return `${name} <${address}>`;
+}
+
+function getAgentMailSendUrl(env: Env): string {
+  const inbox = encodeURIComponent(env.MAIL_FROM_ADDRESS || 'noreply@example.com');
+  return `https://api.agentmail.to/v0/inboxes/${inbox}/messages/send`;
 }
 
 // --- Types ---
@@ -158,13 +179,13 @@ async function getSessionUser(request: Request, db: D1Database): Promise<Session
   return { id: row.id, email: row.email, name: row.name, role: row.role as UserRole };
 }
 
-async function sendOtpEmail(email: string, code: string, farmName: string, siteUrl: string, apiKey: string): Promise<boolean> {
+async function sendOtpEmail(email: string, code: string, farmName: string, siteUrl: string, env: Env): Promise<boolean> {
   const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(email)}&code=${code}`;
   try {
-    const res = await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
+    const res = await fetch(getAgentMailSendUrl(env), {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${env.AGENTMAIL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -189,7 +210,7 @@ async function sendOtpEmail(email: string, code: string, farmName: string, siteU
   </div>
 </div>`,
         headers: {
-          'From': 'Farmscape-OS - ***REMOVED*** Farm <***REMOVED***>',
+          'From': getMailFrom(env),
           'X-Entity-Ref-ID': `otp-${Date.now()}`,
         },
       }),
@@ -206,15 +227,15 @@ async function sendInviteEmail(
   inviterName: string,
   farmName: string,
   siteUrl: string,
-  apiKey: string,
+  env: Env,
   magicLink: string
 ): Promise<boolean> {
   const roleLabel = role === 'admin' ? 'an admin' : role === 'member' ? 'a member' : 'a viewer';
   try {
-    const res = await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
+    const res = await fetch(getAgentMailSendUrl(env), {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${env.AGENTMAIL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -238,7 +259,7 @@ async function sendInviteEmail(
   </div>
 </div>`,
         headers: {
-          'From': 'Farmscape-OS - ***REMOVED*** Farm <***REMOVED***>',
+          'From': getMailFrom(env),
           'X-Entity-Ref-ID': `invite-${Date.now()}`,
         },
       }),
@@ -299,7 +320,7 @@ export default {
         .bind(normalizedEmail).first<{ id: string; status: string }>();
 
       if (!user) {
-        return json({ error: 'No account found for this email. Ask Eva & Spencer for an invite.' }, 404);
+        return json({ error: 'No account found for this email. Ask a farm admin for an invite.' }, 404);
       }
 
       // Rate limit: max 1 OTP per 60 seconds per email
@@ -318,9 +339,9 @@ export default {
       ).bind(normalizedEmail, code, expiresAt).run();
 
       // Send email
-      const farmName = '***REMOVED*** Farm';
+      const farmName = getFarmName(env);
       const siteUrl = url.origin;
-      const sent = await sendOtpEmail(normalizedEmail, code, farmName, siteUrl, env.AGENTMAIL_API_KEY);
+      const sent = await sendOtpEmail(normalizedEmail, code, farmName, siteUrl, env);
       if (!sent) {
         return json({ error: 'Failed to send email. Please try again.' }, 500);
       }
@@ -535,9 +556,9 @@ export default {
         // Send invite email with magic link
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
-        const farmName = '***REMOVED*** Farm';
+        const farmName = getFarmName(env);
         const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(normalizedEmail)}&code=${code}`;
-        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY, magicLink);
+        await sendInviteEmail(normalizedEmail, memberRole, inviterName, farmName, siteUrl, env, magicLink);
 
         await logChange(env.DB, 'users', id, 'invite', user.id, { email: normalizedEmail, role: memberRole });
         return json({ ok: true, id });
@@ -563,9 +584,9 @@ export default {
 
         const siteUrl = url.origin;
         const inviterName = user.name || user.email;
-        const farmName = '***REMOVED*** Farm';
+        const farmName = getFarmName(env);
         const magicLink = `${siteUrl}/auth/verify?email=${encodeURIComponent(member.email)}&code=${code}`;
-        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env.AGENTMAIL_API_KEY, magicLink);
+        const sent = await sendInviteEmail(member.email, member.role, inviterName, farmName, siteUrl, env, magicLink);
         if (!sent) return json({ error: 'Failed to send email' }, 500);
         return json({ ok: true });
       }
@@ -1398,23 +1419,27 @@ export default {
   </div>
 </div>`;
 
-        await fetch('https://api.agentmail.to/v0/inboxes/atlas-nav%40agentmail.to/messages/send', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.AGENTMAIL_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: ['spencer.ahrens@gmail.com'],
-            subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
-            text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
-            html: emailHtml,
+        // Notification recipient is deployment-configured (BUG_REPORT_EMAIL);
+        // when unset, the report is still saved in D1 and no email is sent.
+        if (env.BUG_REPORT_EMAIL) {
+          await fetch(getAgentMailSendUrl(env), {
+            method: 'POST',
             headers: {
-              'From': 'Farmscape-OS - ***REMOVED*** Farm <***REMOVED***>',
-              'X-Entity-Ref-ID': `bug-${id}`,
+              'Authorization': `Bearer ${env.AGENTMAIL_API_KEY}`,
+              'Content-Type': 'application/json',
             },
-          }),
-        });
+            body: JSON.stringify({
+              to: [env.BUG_REPORT_EMAIL],
+              subject: `🪲 [${severity.toUpperCase()}] ${body.title || 'Bug report'}`,
+              text: `Bug Report: ${body.title}\nSeverity: ${severity}\nReporter: ${user.name || user.email}\nRoute: ${body.route || 'unknown'}\nDescription: ${body.description || 'none'}\nReport ID: ${id}`,
+              html: emailHtml,
+              headers: {
+                'From': getMailFrom(env),
+                'X-Entity-Ref-ID': `bug-${id}`,
+              },
+            }),
+          });
+        }
       } catch {
         // Email notification failed — non-critical, report is still saved in D1
       }

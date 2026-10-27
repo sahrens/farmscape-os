@@ -57,6 +57,32 @@ export interface FarmConfig {
     metersPerUnit: number; // Calibrated scale: meters per local coordinate unit
   };
 
+  // Vision page content (optional) — supplied by the deployment's local config.
+  // This repo ships no vision content; each farm provides its own.
+  vision?: {
+    // Markdown intro rendered under the farm name on the Vision page
+    introMarkdown?: string;
+    // Before/after comparison sliders (image URLs)
+    comparisons?: Array<{
+      title: string;
+      desc: string;
+      before: string; // current state
+      after: string; // vision
+    }>;
+  };
+
+  // Events page content (optional) — members-only galleries supplied by the
+  // deployment's local config. Asset files live in the deployment's
+  // public/events/ directory and are never committed to this repo.
+  events?: Array<{
+    title: string;
+    subtitle?: string;
+    description?: string;
+    programPdf?: string; // URL path, e.g. '/events/program.pdf'
+    programLabel?: string; // button label for the program PDF link
+    photos?: string[]; // URL paths, e.g. '/events/photo-1.jpg'
+  }>;
+
   // Donation configuration
   donation?: {
     farmUrl?: string;
