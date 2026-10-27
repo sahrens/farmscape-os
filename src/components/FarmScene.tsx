@@ -7,6 +7,7 @@ import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 import { TerrainMesh } from './TerrainMesh';
 import { sampleTerrainHeight, isTerrainReady } from '@/lib/terrain';
+import { compositeExtent, buildCompositeTexture } from '@/lib/composite';
 import { PlanSymbol, PlanCameraController } from './PlanView';
 
 // ─── Error boundary ───────────────────────────────────────────────
@@ -91,107 +92,92 @@ function Ground() {
   );
 }
 
-// Image layer overlay — textured plane projected on ground
-function ImageLayerPlane({ layer }: { layer: import('@/lib/api').ImageLayer }) {
-  const terrainEnabled = useStore(s => s.terrainEnabled);
+// Image layers — blended once into a single composite texture
+// (lib/composite), then rendered as ONE surface: the terrain's texture in
+// 3D (the terrain mesh samples the part over the grid; this component
+// draws the surrounding apron), or a single flat plane in plan view and
+// in flat 3D mode. One surface means no per-layer depth sorting, so the
+// layers look the same from every angle — including straight down.
+function CompositeLayers() {
+  const imageLayers = useStore(s => s.imageLayers);
   const terrainData = useStore(s => s.terrainData);
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const planView = useStore(s => s.planView);
+  const composite = useStore(s => s.composite);
+  const setComposite = useStore(s => s.setComposite);
 
-  const texture = useMemo(() => {
-    if (!layer.url) return null;
-    const tex = new THREE.TextureLoader().load(layer.url);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }, [layer.url]);
+  // (Re)build the composite whenever the layer set or terrain changes.
+  // Builds race (image decoding is async), so only the latest build may
+  // publish; stale textures are disposed.
+  const buildRef = useRef(0);
+  useEffect(() => {
+    const buildId = ++buildRef.current;
+    const extent = compositeExtent(imageLayers, terrainData);
+    if (!extent) {
+      setComposite(null);
+      return;
+    }
+    let stale = false;
+    buildCompositeTexture(imageLayers, extent).then(texture => {
+      if (stale || buildId !== buildRef.current || !texture) {
+        texture?.dispose();
+        return;
+      }
+      const prev = useStore.getState().composite;
+      if (prev && prev.texture !== texture) prev.texture.dispose();
+      setComposite({ texture, extent });
+    });
+    return () => { stale = true; };
+  }, [imageLayers, terrainData, setComposite]);
 
-  // Build a terrain-conforming geometry for this layer's extent.
-  // Each vertex is displaced to the terrain height sampled at its own farm
-  // coordinates, so the image drapes onto the terrain surface. (Sampling is
-  // exact for the usual unrotated layers; a rotated layer keeps its flat
-  // placement via the fallback below.)
-  const projectedGeo = useMemo(() => {
-    if (!terrainEnabled || !isTerrainReady(terrainData)) return null;
-    if ((layer.rotation || 0) !== 0) return null;
-
-    const { grid_width: gW, grid_height: gH, cell_size: cs, origin_x: ox, origin_y: oy } = terrainData;
-
-    // Layer bounds in farm coords
-    const lMinX = layer.x - layer.width / 2;
-    const lMaxX = layer.x + layer.width / 2;
-    const lMinY = layer.y - layer.height / 2;
-    const lMaxY = layer.y + layer.height / 2;
-
-    // Subdivide at roughly the terrain cell density where they overlap
-    const gxMin = Math.max(0, Math.floor((lMinX - ox) / cs));
-    const gxMax = Math.min(gW - 1, Math.ceil((lMaxX - ox) / cs));
-    const gyMin = Math.max(0, Math.floor((lMinY - oy) / cs));
-    const gyMax = Math.min(gH - 1, Math.ceil((lMaxY - oy) / cs));
-    const segW = Math.max(1, gxMax - gxMin);
-    const segH = Math.max(1, gyMax - gyMin);
-
-    const geo = new THREE.PlaneGeometry(layer.width, layer.height, segW, segH);
+  // Apron geometry for 3D terrain mode: a subdivided plane over the whole
+  // composite extent, displaced by the (edge-clamped) terrain heights. The
+  // terrain mesh draws the grid core on top of it at full resolution.
+  const apronGeo = useMemo(() => {
+    if (!composite || !terrainEnabled || !isTerrainReady(terrainData)) return null;
+    const { extent } = composite;
+    const cs = terrainData.cell_size * 4;
+    const segW = Math.max(1, Math.min(400, Math.ceil(extent.width / cs)));
+    const segH = Math.max(1, Math.min(400, Math.ceil(extent.height / cs)));
+    const geo = new THREE.PlaneGeometry(extent.width, extent.height, segW, segH);
     const pos = geo.attributes.position;
+    const cx = extent.minX + extent.width / 2;
+    const cy = extent.minY + extent.height / 2;
     for (let vi = 0; vi < pos.count; vi++) {
-      // Plane local +X → farm +X, local +Y → farm +Y (after the mesh's
-      // -90° X rotation); local Z becomes world Y, i.e. the height.
-      const fx = layer.x + pos.getX(vi);
-      const fy = layer.y + pos.getY(vi);
+      const fx = cx + pos.getX(vi);
+      const fy = cy + pos.getY(vi);
       pos.setZ(vi, sampleTerrainHeight(terrainData, fx, fy));
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     return geo;
-  }, [terrainEnabled, terrainData, layer.x, layer.y, layer.width, layer.height, layer.rotation]);
+  }, [composite, terrainEnabled, terrainData]);
 
-  if (!texture || !layer.visible) return null;
+  if (!composite) return null;
+  const { texture, extent } = composite;
+  const cx = extent.minX + extent.width / 2;
+  const cy = extent.minY + extent.height / 2;
 
-  const rotRad = (layer.rotation || 0) * (Math.PI / 180);
-  const yOffset = 0.1 + (layer.sort_order || 0) * 0.01;
-
-  // When terrain is active and we have a projected geometry, use it
-  if (terrainEnabled && projectedGeo) {
+  // 3D terrain mode: the apron under the textured terrain mesh.
+  if (!planView && terrainEnabled && isTerrainReady(terrainData) && apronGeo) {
     return (
       <mesh
-        rotation={[-Math.PI / 2, rotRad, 0]}
-        position={[layer.x, yOffset, -layer.y]}
-        geometry={projectedGeo}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[cx, -0.15, -cy]}
+        geometry={apronGeo}
+        renderOrder={-1}
       >
-        <meshBasicMaterial
-          map={texture}
-          transparent
-          opacity={layer.opacity}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial map={texture} transparent depthWrite side={THREE.DoubleSide} />
       </mesh>
     );
   }
 
-  // Flat mode (no terrain)
+  // Plan view and flat 3D mode: one flat plane.
   return (
-    <mesh
-      rotation={[-Math.PI / 2, rotRad, 0]}
-      position={[layer.x, 0.05 + (layer.sort_order || 0) * 0.01, -layer.y]}
-    >
-      <planeGeometry args={[layer.width, layer.height]} />
-      <meshBasicMaterial
-        map={texture}
-        transparent
-        opacity={layer.opacity}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-      />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.02, -cy]}>
+      <planeGeometry args={[extent.width, extent.height]} />
+      <meshBasicMaterial map={texture} transparent depthWrite side={THREE.DoubleSide} />
     </mesh>
-  );
-}
-
-function ImageLayers() {
-  const imageLayers = useStore(s => s.imageLayers);
-  return (
-    <>
-      {imageLayers.filter(l => l.visible).map(layer => (
-        <ImageLayerPlane key={layer.id} layer={layer} />
-      ))}
-    </>
   );
 }
 
@@ -199,7 +185,8 @@ function ImageLayers() {
 function BoundaryLine() {
   const terrainEnabled = useStore(s => s.terrainEnabled);
   const terrainData = useStore(s => s.terrainData);
-  const drape = terrainEnabled && isTerrainReady(terrainData);
+  const planView = useStore(s => s.planView);
+  const drape = !planView && terrainEnabled && isTerrainReady(terrainData);
 
   const points = useMemo(() => {
     const boundary = farmConfig.boundary;
@@ -233,7 +220,8 @@ function OverlayLines() {
   const overlays = farmConfig.overlays || [];
   const terrainEnabled = useStore(s => s.terrainEnabled);
   const terrainData = useStore(s => s.terrainData);
-  const drape = terrainEnabled && isTerrainReady(terrainData);
+  const planView = useStore(s => s.planView);
+  const drape = !planView && terrainEnabled && isTerrainReady(terrainData);
 
   return (
     <>
@@ -963,6 +951,7 @@ function Scene() {
   const terrainEnabled = useStore(s => s.terrainEnabled);
   const planView = useStore(s => s.planView);
   const imageLayers = useStore(s => s.imageLayers);
+  const composite = useStore(s => s.composite);
 
   const filtered = useMemo(() => {
     return elements.filter(el => {
@@ -1030,7 +1019,7 @@ function Scene() {
           applies the same rule to its own surface while terrain is on) */}
       {!planView && (terrainEnabled
         ? <TerrainMesh />
-        : !imageLayers.some(l => l.visible) && <Ground />)}
+        : !composite && <Ground />)}
       {planView && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gx, -0.1, gz]}>
           <planeGeometry args={[gw, gd]} />
@@ -1039,7 +1028,7 @@ function Scene() {
       )}
       <BoundaryLine />
       <OverlayLines />
-      <ImageLayers />
+      <CompositeLayers />
 
       {/* Farm elements — show plan symbols OR 3D meshes */}
       {planView ? (

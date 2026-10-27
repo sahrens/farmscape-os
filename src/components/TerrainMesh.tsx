@@ -18,12 +18,10 @@ export function TerrainMesh() {
   const terrainData = useStore(s => s.terrainData);
   const saveTerrain = useStore(s => s.saveTerrain);
   const terrainEditMode = useStore(s => s.terrainEditMode);
-  const imageLayers = useStore(s => s.imageLayers);
-  // When image layers are visible they form the ground surface (draped onto
-  // this terrain), so the plain surface mesh is skipped — it would only
-  // double up with the layers. The mesh comes back in edit mode, where the
-  // brush needs it, and the topo lines always stay.
-  const layersCoverGround = !terrainEditMode && imageLayers.some(l => l.visible);
+  // The composited layer image is this mesh's texture (see lib/composite):
+  // the surface always renders — it is the ground — wearing the composite
+  // over the grid and the plain green material when there are no layers.
+  const composite = useStore(s => s.composite);
   const terrainBrushMode = useStore(s => s.terrainBrushMode);
   const terrainBrushSize = useStore(s => s.terrainBrushSize);
 
@@ -77,6 +75,34 @@ export function TerrainMesh() {
     pos.needsUpdate = true;
     geo.computeVertexNormals();
   }, [gridW, gridH]);
+
+  // Point the mesh's UVs into the composite image: the composite covers
+  // a world extent larger than the grid, so each vertex maps by its farm
+  // coordinates rather than the plane's own 0..1 span. Vertex rows run
+  // opposite to grid rows (see updateGeometry), hence gridH - iy.
+  const remapUVs = useCallback(() => {
+    const geo = geoRef.current;
+    if (!geo || !composite) return;
+    const uv = geo.attributes.uv;
+    if (!uv) return;
+    const { extent } = composite;
+    for (let i = 0; i < uv.count; i++) {
+      const ix = i % (gridW + 1);
+      const iy = Math.floor(i / (gridW + 1));
+      const worldX = originX + ix * cellSize;
+      const worldY = originY + (gridH - iy) * cellSize;
+      uv.setXY(
+        i,
+        (worldX - extent.minX) / extent.width,
+        (worldY - extent.minY) / extent.height,
+      );
+    }
+    uv.needsUpdate = true;
+  }, [composite, gridW, gridH, cellSize, originX, originY]);
+
+  useEffect(() => {
+    remapUVs();
+  }, [remapUVs, terrainData]);
 
   // Apply brush at a point
   const applyBrush = useCallback((point: THREE.Vector3) => {
@@ -238,28 +264,33 @@ export function TerrainMesh() {
 
   return (
     <group>
-      {/* Terrain mesh (skipped while image layers cover the ground) */}
-      {!layersCoverGround && (
-        <mesh
-          ref={meshRef}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[originX + totalW / 2, 0, -(originY + totalH / 2)]}
-          onPointerDown={handlePointerDown as unknown as (e: THREE.Event) => void}
-          onPointerUp={handlePointerUp}
-          receiveShadow
-        >
-          <planeGeometry ref={geoRef} args={[totalW, totalH, gridW, gridH]} />
+      {/* Terrain surface — the ground itself. With a layer composite it
+          wears the composite as its texture; in edit mode it falls back
+          to the plain wireframe material the brush works against. */}
+      <mesh
+        ref={meshRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[originX + totalW / 2, 0, -(originY + totalH / 2)]}
+        onPointerDown={handlePointerDown as unknown as (e: THREE.Event) => void}
+        onPointerUp={handlePointerUp}
+        receiveShadow
+      >
+        <planeGeometry ref={geoRef} args={[totalW, totalH, gridW, gridH]} />
+        {composite && !terrainEditMode ? (
+          <meshBasicMaterial map={composite.texture} transparent depthWrite side={THREE.DoubleSide} />
+        ) : (
           <meshStandardMaterial
             color="#4a7a3a"
             wireframe={terrainEditMode}
             side={THREE.DoubleSide}
             flatShading
           />
-        </mesh>
-      )}
+        )}
+      </mesh>
 
-      {/* Topo contour lines */}
-      {topoLines && topoLines.map((line, i) => (
+      {/* Topo contour lines (the layer composite carries its own
+          contour artwork, so these show only without one) */}
+      {topoLines && (!composite || terrainEditMode) && topoLines.map((line, i) => (
         <lineSegments key={`topo-${i}`}>
           <bufferGeometry>
             <bufferAttribute

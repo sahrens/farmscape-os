@@ -89,6 +89,11 @@ interface FarmStore {
   fetchTerrain: () => Promise<void>;
   saveTerrain: (heights: number[]) => Promise<boolean>;
 
+  // Layer composite — all visible image layers blended into one texture
+  // (see lib/composite). Built by the scene; read by the terrain mesh.
+  composite: import('./composite').CompositeImage | null;
+  setComposite: (composite: import('./composite').CompositeImage | null) => void;
+
   // Image Layers
   imageLayers: api.ImageLayer[];
   imageLayersLoading: boolean;
@@ -395,6 +400,8 @@ export const useStore = create<FarmStore>((set, get) => ({
   // Terrain (on by default; layers and elements project onto it)
   terrainEnabled: true,
   setTerrainEnabled: (enabled) => set({ terrainEnabled: enabled }),
+  composite: null,
+  setComposite: (composite) => set({ composite }),
   terrainData: null,
   terrainLoading: false,
   terrainEditMode: false,
