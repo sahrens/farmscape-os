@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store';
 import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 import { TerrainMesh } from './TerrainMesh';
+import { sampleTerrainHeight, isTerrainReady } from '@/lib/terrain';
 import { PlanSymbol, PlanCameraController } from './PlanView';
 
 // ─── Error boundary ───────────────────────────────────────────────
@@ -102,54 +103,44 @@ function ImageLayerPlane({ layer }: { layer: import('@/lib/api').ImageLayer }) {
     return tex;
   }, [layer.url]);
 
-  // Build a terrain-conforming geometry for this layer's extent
+  // Build a terrain-conforming geometry for this layer's extent.
+  // Each vertex is displaced to the terrain height sampled at its own farm
+  // coordinates, so the image drapes onto the terrain surface. (Sampling is
+  // exact for the usual unrotated layers; a rotated layer keeps its flat
+  // placement via the fallback below.)
   const projectedGeo = useMemo(() => {
-    if (!terrainEnabled || !terrainData || !terrainData.heights.length) return null;
+    if (!terrainEnabled || !isTerrainReady(terrainData)) return null;
+    if ((layer.rotation || 0) !== 0) return null;
 
-    const { grid_width: gW, grid_height: gH, cell_size: cs, origin_x: ox, origin_y: oy, heights } = terrainData;
-    if (heights.length !== gW * gH) return null;
+    const { grid_width: gW, grid_height: gH, cell_size: cs, origin_x: ox, origin_y: oy } = terrainData;
 
     // Layer bounds in farm coords
-    const halfW = layer.width / 2;
-    const halfH = layer.height / 2;
-    const lMinX = layer.x - halfW;
-    const lMaxX = layer.x + halfW;
-    const lMinY = layer.y - halfH;
-    const lMaxY = layer.y + halfH;
+    const lMinX = layer.x - layer.width / 2;
+    const lMaxX = layer.x + layer.width / 2;
+    const lMinY = layer.y - layer.height / 2;
+    const lMaxY = layer.y + layer.height / 2;
 
-    // Determine grid cells that overlap this layer
+    // Subdivide at roughly the terrain cell density where they overlap
     const gxMin = Math.max(0, Math.floor((lMinX - ox) / cs));
     const gxMax = Math.min(gW - 1, Math.ceil((lMaxX - ox) / cs));
     const gyMin = Math.max(0, Math.floor((lMinY - oy) / cs));
     const gyMax = Math.min(gH - 1, Math.ceil((lMaxY - oy) / cs));
+    const segW = Math.max(1, gxMax - gxMin);
+    const segH = Math.max(1, gyMax - gyMin);
 
-    const segW = gxMax - gxMin;
-    const segH = gyMax - gyMin;
-    if (segW < 1 || segH < 1) return null;
-
-    // Build a plane with vertices matching the terrain heights in this region
     const geo = new THREE.PlaneGeometry(layer.width, layer.height, segW, segH);
     const pos = geo.attributes.position;
-    const uv = geo.attributes.uv;
-
-    for (let iy = 0; iy <= segH; iy++) {
-      for (let ix = 0; ix <= segW; ix++) {
-        const vi = iy * (segW + 1) + ix;
-        // Grid cell this vertex corresponds to
-        const hx = Math.min(gxMin + ix, gW - 1);
-        const hy = Math.min(gyMin + iy, gH - 1);
-        const h = heights[hy * gW + hx] || 0;
-        // Set Z (which becomes Y after rotation) to the terrain height
-        pos.setZ(vi, h);
-        // UV: map to 0-1 across the layer extent
-        uv.setXY(vi, ix / segW, 1 - iy / segH);
-      }
+    for (let vi = 0; vi < pos.count; vi++) {
+      // Plane local +X → farm +X, local +Y → farm +Y (after the mesh's
+      // -90° X rotation); local Z becomes world Y, i.e. the height.
+      const fx = layer.x + pos.getX(vi);
+      const fy = layer.y + pos.getY(vi);
+      pos.setZ(vi, sampleTerrainHeight(terrainData, fx, fy));
     }
     pos.needsUpdate = true;
-    uv.needsUpdate = true;
     geo.computeVertexNormals();
     return geo;
-  }, [terrainEnabled, terrainData, layer.x, layer.y, layer.width, layer.height]);
+  }, [terrainEnabled, terrainData, layer.x, layer.y, layer.width, layer.height, layer.rotation]);
 
   if (!texture || !layer.visible) return null;
 
@@ -204,18 +195,30 @@ function ImageLayers() {
   );
 }
 
-// Boundary outline
+// Boundary outline — draped onto the terrain surface when terrain is on
 function BoundaryLine() {
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
+  const drape = terrainEnabled && isTerrainReady(terrainData);
+
   const points = useMemo(() => {
     const boundary = farmConfig.boundary;
     if (boundary.length < 2) return null;
-    const pts = boundary.map(p => new THREE.Vector3(p.x, 0.5, -p.y));
+    const pts = boundary.map(p => new THREE.Vector3(
+      p.x,
+      (drape ? sampleTerrainHeight(terrainData, p.x, p.y) : 0) + 0.5,
+      -p.y,
+    ));
     pts.push(pts[0].clone());
     return pts;
-  }, []);
+  }, [drape, terrainData]);
 
-  if (!points) return null;
-  const geo = useMemo(() => new THREE.BufferGeometry().setFromPoints(points!), [points]);
+  const geo = useMemo(
+    () => (points ? new THREE.BufferGeometry().setFromPoints(points) : null),
+    [points],
+  );
+
+  if (!points || !geo) return null;
 
   return (
     <line>
@@ -225,15 +228,22 @@ function BoundaryLine() {
   );
 }
 
-// Overlay lines (clearing edges, fence lines, etc.)
+// Overlay lines (clearing edges, fence lines, etc.) — draped like the boundary
 function OverlayLines() {
   const overlays = farmConfig.overlays || [];
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
+  const drape = terrainEnabled && isTerrainReady(terrainData);
 
   return (
     <>
       {overlays.map((overlay, idx) => {
         if (overlay.points.length < 2) return null;
-        const pts = overlay.points.map(p => new THREE.Vector3(p.x, 0.3, -p.y));
+        const pts = overlay.points.map(p => new THREE.Vector3(
+          p.x,
+          (drape ? sampleTerrainHeight(terrainData, p.x, p.y) : 0) + 0.3,
+          -p.y,
+        ));
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
         return (
           <line key={idx}>
@@ -378,30 +388,82 @@ function Tree({ el, selected, onClick }: { el: FarmElement; selected: boolean; o
 
 // Zone element (flat area with border)
 // NOTE: Position and rotation are applied by the parent ElementMesh group.
+// When terrain is on, the zone sheet drapes onto the terrain surface: the
+// parent group already sits at the terrain height of the zone's center, and
+// each vertex of the sheet is offset by its own sampled height relative to
+// that center. (Sampling uses unrotated offsets — exact for the usual
+// unrotated zones.)
 function Zone({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const w = el.width || 30;
   const d = el.height || 30;
   const color = getColor(el);
   const isPlanned = el.status === 'planned';
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
+  const drape = terrainEnabled && isTerrainReady(terrainData);
+
+  const draped = useMemo(() => {
+    if (!drape || !terrainData) return null;
+    const cs = terrainData.cell_size;
+    const segW = Math.min(64, Math.max(1, Math.ceil(w / cs)));
+    const segH = Math.min(64, Math.max(1, Math.ceil(d / cs)));
+    const centerH = sampleTerrainHeight(terrainData, el.x, el.y);
+    const geo = new THREE.PlaneGeometry(w, d, segW, segH);
+    const pos = geo.attributes.position;
+    for (let vi = 0; vi < pos.count; vi++) {
+      const fx = el.x + pos.getX(vi);
+      const fy = el.y + pos.getY(vi);
+      pos.setZ(vi, sampleTerrainHeight(terrainData, fx, fy) - centerH);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    // Border loop of the draped sheet, in plane-local coords
+    const border: THREE.Vector3[] = [];
+    const idx = (ix: number, iy: number) => iy * (segW + 1) + ix;
+    for (let ix = 0; ix <= segW; ix++) border.push(new THREE.Vector3().fromBufferAttribute(pos, idx(ix, 0)));
+    for (let iy = 1; iy <= segH; iy++) border.push(new THREE.Vector3().fromBufferAttribute(pos, idx(segW, iy)));
+    for (let ix = segW - 1; ix >= 0; ix--) border.push(new THREE.Vector3().fromBufferAttribute(pos, idx(ix, segH)));
+    for (let iy = segH - 1; iy >= 1; iy--) border.push(new THREE.Vector3().fromBufferAttribute(pos, idx(0, iy)));
+    const borderGeo = new THREE.BufferGeometry().setFromPoints(border);
+    return { geo, borderGeo };
+  }, [drape, terrainData, el.x, el.y, w, d]);
 
   return (
     <group
       position={[0, 0.2, 0]}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
     >
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[w, d]} />
-        <meshStandardMaterial
-          color={selected ? '#ffcc00' : color}
-          transparent
-          opacity={isPlanned ? 0.25 : 0.4}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <lineSegments rotation={[-Math.PI / 2, 0, 0]}>
-        <edgesGeometry args={[new THREE.PlaneGeometry(w, d)]} />
-        <lineBasicMaterial color={selected ? '#ffcc00' : color} transparent opacity={0.8} />
-      </lineSegments>
+      {draped ? (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={draped.geo}>
+            <meshStandardMaterial
+              color={selected ? '#ffcc00' : color}
+              transparent
+              opacity={isPlanned ? 0.25 : 0.4}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <lineLoop rotation={[-Math.PI / 2, 0, 0]} geometry={draped.borderGeo}>
+            <lineBasicMaterial color={selected ? '#ffcc00' : color} transparent opacity={0.8} />
+          </lineLoop>
+        </>
+      ) : (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[w, d]} />
+            <meshStandardMaterial
+              color={selected ? '#ffcc00' : color}
+              transparent
+              opacity={isPlanned ? 0.25 : 0.4}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <lineSegments rotation={[-Math.PI / 2, 0, 0]}>
+            <edgesGeometry args={[new THREE.PlaneGeometry(w, d)]} />
+            <lineBasicMaterial color={selected ? '#ffcc00' : color} transparent opacity={0.8} />
+          </lineSegments>
+        </>
+      )}
       <Text
         position={[0, 2, 0]}
         fontSize={4}
@@ -833,7 +895,12 @@ function ElementMesh({ el }: { el: FarmElement }) {
   const editMode = useStore(s => s.editMode);
   const editingElementId = useStore(s => s.editingElementId);
   const enterEditMode = useStore(s => s.enterEditMode);
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
   const selected = selectedId === el.id;
+
+  // Sit the element on the terrain surface when terrain is on
+  const baseY = terrainEnabled ? sampleTerrainHeight(terrainData, el.x, el.y) : 0;
 
   // Register/unregister group in the module-level registry
   useEffect(() => {
@@ -861,7 +928,7 @@ function ElementMesh({ el }: { el: FarmElement }) {
   return (
     <group
       ref={groupRef}
-      position={[el.x, 0, -el.y]}
+      position={[el.x, baseY, -el.y]}
       rotation={[0, (el.rotation * Math.PI) / 180, 0]}
     >
       {(() => {

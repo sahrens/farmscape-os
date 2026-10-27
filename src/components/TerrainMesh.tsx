@@ -58,9 +58,13 @@ export function TerrainMesh() {
     for (let i = 0; i < pos.count; i++) {
       const ix = i % (gridW + 1);
       const iy = Math.floor(i / (gridW + 1));
-      // Map grid index to height array (nearest cell)
+      // Map grid index to height array (nearest cell).
+      // PlaneGeometry's first vertex row (iy = 0) is the local +Y edge,
+      // which the mesh's -90° X rotation places at the maximum farm-y
+      // edge — while grid row 0 is the minimum-y edge (see lib/terrain).
+      // So the row index runs opposite to iy.
       const hx = Math.min(ix, gridW - 1);
-      const hy = Math.min(iy, gridH - 1);
+      const hy = Math.min(gridH - iy, gridH - 1);
       const hi = hy * gridW + hx;
       pos.setZ(i, heights[hi] || 0);
     }
