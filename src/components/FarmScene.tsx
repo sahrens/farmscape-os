@@ -515,6 +515,48 @@ function Structure({ el, selected, onClick }: { el: FarmElement; selected: boole
           <boxGeometry args={[w + 0.3, 0.35, d + 0.3]} />
           <meshStandardMaterial color={roofColor} roughness={0.7} metalness={0.2} />
         </mesh>
+        {/* Rooftop solar (metadata.solarPanels): panels in a row along the
+            roof, tilted so the low edge faces south (+z in local frame). */}
+        {(() => {
+          const count = ((el.metadata as Record<string, unknown>)?.solarPanels as number) || 0;
+          if (!count) return null;
+          const tilt = 0.349; // 20 degrees
+          const gap = 1.5;
+          const panelW = Math.min(12, (w - 2 - (count - 1) * gap) / count);
+          const panelD = Math.min(6, d - 2);
+          const capTop = h / 2 + 0.3;
+          const rise = Math.sin(tilt) * (panelD / 2);
+          const panelY = capTop + 0.55 + rise;
+          const heightAt = (z: number) => panelY - Math.tan(tilt) * z;
+          const span = count * panelW + (count - 1) * gap;
+          return Array.from({ length: count }, (_, i) => {
+            const cx = -span / 2 + panelW / 2 + i * (panelW + gap);
+            const legN = heightAt(-(panelD / 2 - 0.5)) - capTop - 0.1;
+            const legS = heightAt(panelD / 2 - 0.5) - capTop - 0.1;
+            return (
+              <group key={i}>
+                <mesh position={[cx, capTop + legN / 2, -(panelD / 2 - 0.5)]} castShadow>
+                  <boxGeometry args={[0.4, legN, 0.4]} />
+                  <meshStandardMaterial color="#9a9a9a" roughness={0.5} metalness={0.5} />
+                </mesh>
+                <mesh position={[cx, capTop + legS / 2, panelD / 2 - 0.5]} castShadow>
+                  <boxGeometry args={[0.4, legS, 0.4]} />
+                  <meshStandardMaterial color="#9a9a9a" roughness={0.5} metalness={0.5} />
+                </mesh>
+                <group position={[cx, panelY, 0]} rotation={[tilt, 0, 0]}>
+                  <mesh castShadow>
+                    <boxGeometry args={[panelW + 0.35, 0.16, panelD + 0.35]} />
+                    <meshStandardMaterial color="#c8c8c8" roughness={0.4} metalness={0.6} />
+                  </mesh>
+                  <mesh position={[0, 0.05, 0]} castShadow>
+                    <boxGeometry args={[panelW, 0.22, panelD]} />
+                    <meshStandardMaterial color="#16324f" roughness={0.32} metalness={0.55} />
+                  </mesh>
+                </group>
+              </group>
+            );
+          });
+        })()}
         {selected && (
           <mesh position={[0, -h / 2 + 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[Math.max(w, d) * 0.6, Math.max(w, d) * 0.7, 32]} />

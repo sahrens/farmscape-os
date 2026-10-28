@@ -267,6 +267,24 @@ function StructurePlanSymbol({ el }: { el: FarmElement }) {
       <LineSegments3D geometry={ridgeGeo} color="#333333" opacity={isPlanned ? 0.3 : 0.6} />
       {/* Hatch fill */}
       <LineSegments3D geometry={hatchGeo} color={color} opacity={isPlanned ? 0.15 : 0.25} />
+      {/* Rooftop solar panels (metadata.solarPanels), drawn on the footprint */}
+      {(() => {
+        const count = ((el.metadata as Record<string, unknown>)?.solarPanels as number) || 0;
+        if (!count) return null;
+        const gap = 1.5;
+        const panelW = Math.min(12, (w - 2 - (count - 1) * gap) / count);
+        const panelD = Math.min(6, d - 2);
+        const span = count * panelW + (count - 1) * gap;
+        return Array.from({ length: count }, (_, i) => (
+          <mesh
+            key={i}
+            position={[-span / 2 + panelW / 2 + i * (panelW + gap), 0, 0.06]}
+          >
+            <planeGeometry args={[panelW, panelD]} />
+            <meshBasicMaterial color="#16324f" transparent opacity={0.85} side={THREE.DoubleSide} />
+          </mesh>
+        ));
+      })()}
     </group>
   );
 }
