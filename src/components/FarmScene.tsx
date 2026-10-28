@@ -287,6 +287,34 @@ function GableRoof({ w, d, roofHeight, color }: { w: number; d: number; roofHeig
 // Structure element (box with gable roof)
 // NOTE: Position and rotation are applied by the parent ElementMesh group.
 // This component renders at local origin.
+
+// Shipping-container sides: vertical corrugation drawn once on a small
+// canvas and repeated along the box. The material color tints it, so a
+// white container reads white with shaded ribs.
+const containerTextures = new Map<number, THREE.Texture>();
+function containerSideTexture(repeatX: number): THREE.Texture {
+  const cached = containerTextures.get(repeatX);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d')!;
+  for (let rib = 0; rib < 4; rib++) {
+    const g = ctx.createLinearGradient(rib * 32, 0, rib * 32 + 32, 0);
+    g.addColorStop(0, '#f4f4f4');
+    g.addColorStop(0.68, '#d9d9d9');
+    g.addColorStop(1, '#a8a8a8');
+    ctx.fillStyle = g;
+    ctx.fillRect(rib * 32, 0, 32, 16);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, 1);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  containerTextures.set(repeatX, tex);
+  return tex;
+}
+
 function Structure({ el, selected, onClick }: { el: FarmElement; selected: boolean; onClick: () => void }) {
   const w = el.width || 20;
   const d = el.height || 15;
@@ -295,6 +323,55 @@ function Structure({ el, selected, onClick }: { el: FarmElement; selected: boole
   const roofColor = (el.metadata as Record<string, unknown>)?.roofColor as string || '#4a4a4a';
   const roofHeight = Math.min(w, d) * 0.3;
   const ridgeAlongX = w >= d;
+
+  // Shipping container (e.g. the processing facility): a corrugated box
+  // with corner posts, door locking bars on the +X end and a flat cap —
+  // no gable roof.
+  if (el.subtype === 'container') {
+    const sideTex = containerSideTexture(Math.max(2, Math.round(w / 3.6)));
+    const barZ = [-d / 2 + 1.1, -d / 6, d / 6, d / 2 - 1.1];
+    return (
+      <group
+        position={[0, h / 2, 0]}
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+      >
+        <mesh castShadow>
+          <boxGeometry args={[w, h, d]} />
+          <meshStandardMaterial
+            color={selected ? '#ffcc00' : color}
+            map={sideTex}
+            roughness={0.62}
+            metalness={0.28}
+          />
+        </mesh>
+        {/* corner posts */}
+        {([[-1, -1], [-1, 1], [1, -1], [1, 1]] as const).map(([sx, sz], i) => (
+          <mesh key={i} position={[sx * w / 2, 0, sz * d / 2]} castShadow>
+            <boxGeometry args={[0.95, h, 0.95]} />
+            <meshStandardMaterial color={selected ? '#ffcc00' : '#c9c5b9'} roughness={0.6} metalness={0.3} />
+          </mesh>
+        ))}
+        {/* door locking bars, +X end */}
+        {barZ.map((z, i) => (
+          <mesh key={i} position={[w / 2 + 0.22, 0, z]} castShadow>
+            <boxGeometry args={[0.38, h * 0.94, 0.38]} />
+            <meshStandardMaterial color="#8f8b80" roughness={0.5} metalness={0.45} />
+          </mesh>
+        ))}
+        {/* flat roof cap */}
+        <mesh position={[0, h / 2 + 0.12, 0]} castShadow>
+          <boxGeometry args={[w + 0.3, 0.35, d + 0.3]} />
+          <meshStandardMaterial color={roofColor} roughness={0.7} metalness={0.2} />
+        </mesh>
+        {selected && (
+          <mesh position={[0, -h / 2 + 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[Math.max(w, d) * 0.6, Math.max(w, d) * 0.7, 32]} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={0.8} />
+          </mesh>
+        )}
+      </group>
+    );
+  }
 
   return (
     <group
