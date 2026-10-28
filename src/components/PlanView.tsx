@@ -531,10 +531,19 @@ export function PlanLabels({ elements }: { elements: FarmElement[] }) {
   const labels = useMemo(() => {
     const out: Array<{ key: string; x: number; y: number; size: number; color: string; text: string }> = [];
 
+    const structures = elements.filter(e => e.type === 'structure' && e.name);
     for (const el of elements) {
       if (el.type === 'tree') continue;
       if (el.subtype === 'boundary_marker') continue;
-      if (el.name) {
+      if (!el.name) continue;
+      // A pad/work zone named after a structure it contains ("Hoop House
+      // Pad" around the "Hoop House") yields its label to that structure —
+      // side by side the two labels collide into unreadable mush.
+      const yieldsTo = el.type === 'zone' && structures.some(s =>
+        s.name && el.name !== s.name && el.name.startsWith(s.name) &&
+        Math.abs(s.x - el.x) <= (el.width || 0) / 2 &&
+        Math.abs(s.y - el.y) <= (el.height || 0) / 2);
+      if (!yieldsTo) {
         out.push({ key: `el-${el.id}`, x: el.x, y: el.y, size: 7, color: '#2f2a24', text: el.name });
       }
     }

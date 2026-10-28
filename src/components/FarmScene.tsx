@@ -109,14 +109,14 @@ function Labels3D({ elements }: { elements: FarmElement[] }) {
       if (el.type === 'structure' && el.name) {
         out.push({
           key: `s-${el.id}`,
-          pos: [el.x, groundAt(el.x, el.y) + (el.elevation || 12) + 7, -el.y],
+          pos: [el.x, groundAt(el.x, el.y) + (el.elevation || 12) + 12, -el.y],
           size: 10,
           text: el.name,
         });
       } else if (el.type === 'infrastructure' && el.subtype === 'driveway' && el.name) {
         out.push({
           key: `s-${el.id}`,
-          pos: [el.x, groundAt(el.x, el.y) + 7, -el.y],
+          pos: [el.x, groundAt(el.x, el.y) + 11, -el.y],
           size: 9,
           text: el.name,
         });
@@ -140,7 +140,7 @@ function Labels3D({ elements }: { elements: FarmElement[] }) {
       }
       out.push({
         key: `t-${subtype}`,
-        pos: [best.x, groundAt(best.x, best.y) + (best.elevation || 20) + 8, -best.y],
+        pos: [best.x, groundAt(best.x, best.y) + (best.elevation || 20) + 14, -best.y],
         size: 10,
         text: SPECIES_LABELS[subtype] || subtype.replace(/_/g, ' '),
       });
@@ -475,6 +475,82 @@ function Structure({ el, selected, onClick }: { el: FarmElement; selected: boole
   const roofColor = (el.metadata as Record<string, unknown>)?.roofColor as string || '#4a4a4a';
   const roofHeight = Math.min(w, d) * 0.3;
   const ridgeAlongX = w >= d;
+
+  // Hoop house (subtype 'greenhouse'): a translucent arch tunnel — half-
+  // cylinder plastic skin over steel hoops, short straight sidewalls, half-
+  // disc ends with a door on the +X end. The arch spans the short axis and
+  // runs along the long one, like the gable logic below.
+  if (el.subtype === 'greenhouse') {
+    const len = Math.max(w, d);
+    const span = Math.min(w, d);
+    const R = span / 2;
+    const sw = 4; // sidewall height
+    const skin = selected ? '#ffcc00' : '#eef2e8';
+    const hoopXs = Array.from({ length: 6 }, (_, i) => -len / 2 + (len * i) / 5);
+    return (
+      <group
+        position={[0, 0, 0]}
+        rotation={w >= d ? [0, 0, 0] : [0, Math.PI / 2, 0]}
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+      >
+        {/* plastic skin: half cylinder, axis along X, opening down */}
+        <mesh position={[0, sw, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[R, R, len, 32, 1, true, 0, Math.PI]} />
+          <meshStandardMaterial
+            color={skin}
+            transparent
+            opacity={0.45}
+            roughness={0.85}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+        {/* sidewalls */}
+        {([-1, 1] as const).map(s => (
+          <mesh key={s} position={[0, sw / 2, s * (R - 0.05)]}>
+            <boxGeometry args={[len, sw, 0.25]} />
+            <meshStandardMaterial color={skin} transparent opacity={0.55} roughness={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        ))}
+        {/* steel hoops */}
+        {hoopXs.map((hx, i) => (
+          <mesh key={i} position={[hx, sw, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <torusGeometry args={[R, 0.22, 8, 32, Math.PI]} />
+            <meshStandardMaterial color="#aeb6ba" roughness={0.4} metalness={0.65} />
+          </mesh>
+        ))}
+        {/* ridge purlin */}
+        <mesh position={[0, sw + R + 0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.22, 0.22, len, 8]} />
+          <meshStandardMaterial color="#aeb6ba" roughness={0.4} metalness={0.65} />
+        </mesh>
+        {/* end caps (half discs) + door on the +X end */}
+        {([-1, 1] as const).map(s => (
+          <mesh key={s} position={[s * (len / 2), sw, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <circleGeometry args={[R, 32, 0, Math.PI]} />
+            <meshStandardMaterial color={skin} transparent opacity={0.5} roughness={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        ))}
+        <mesh position={[len / 2 + 0.15, 4, 0]}>
+          <boxGeometry args={[0.3, 8, 5]} />
+          <meshStandardMaterial color="#5a6157" roughness={0.8} />
+        </mesh>
+        {/* ground rails */}
+        {([-1, 1] as const).map(s => (
+          <mesh key={s} position={[0, 0.25, s * (R - 0.2)]}>
+            <boxGeometry args={[len, 0.5, 0.5]} />
+            <meshStandardMaterial color="#6f6a5e" roughness={0.7} />
+          </mesh>
+        ))}
+        {selected && (
+          <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[Math.max(w, d) * 0.6, Math.max(w, d) * 0.7, 32]} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={0.8} />
+          </mesh>
+        )}
+      </group>
+    );
+  }
 
   // Shipping container (e.g. the processing facility): a corrugated box
   // with corner posts, door locking bars on the +X end and a flat cap —
