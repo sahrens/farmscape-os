@@ -479,7 +479,7 @@ export function PlanSymbol({ el }: { el: FarmElement }) {
 // that type nearest the type's own centroid, so the name sits in the
 // middle of its planting rather than on an edge tree.
 
-const SPECIES_LABELS: Record<string, string> = {
+export const SPECIES_LABELS: Record<string, string> = {
   breadfruit: 'ʻUlu (Breadfruit)',
   avocado: 'Avocado',
   citrus: 'Citrus',

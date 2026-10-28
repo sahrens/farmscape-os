@@ -98,7 +98,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 export async function buildCompositeTexture(
   layers: ImageLayer[],
   extent: CompositeExtent,
-  maxSide = 3072,
+  maxSide = 3584,
 ): Promise<THREE.CanvasTexture | null> {
   const visible = layers
     .filter(l => l.visible && l.url)

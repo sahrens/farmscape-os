@@ -24,6 +24,9 @@ export interface FarmConfig {
     points: Array<{ x: number; y: number }>;
     color?: string;
     opacity?: number;
+    // Ground width in farm units. When set, the overlay renders as a
+    // terrain-draped ribbon (roads, tracks) instead of a hairline.
+    width?: number;
   }>;
 
   // Camera defaults for the 3D viewer

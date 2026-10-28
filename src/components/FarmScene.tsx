@@ -8,7 +8,7 @@ import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 import { TerrainMesh } from './TerrainMesh';
 import { sampleTerrainHeight, isTerrainReady } from '@/lib/terrain';
 import { compositeExtent, buildCompositeTexture } from '@/lib/composite';
-import { PlanSymbol, PlanCameraController, PlanLabels } from './PlanView';
+import { PlanSymbol, PlanCameraController, PlanLabels, SPECIES_LABELS } from './PlanView';
 
 // ─── Error boundary ───────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: string }
@@ -89,6 +89,97 @@ function Ground() {
         </mesh>
       )}
     </group>
+  );
+}
+
+
+// Floating labels for the 3D view — the same set the plan view draws:
+// structures and the driveway by name, roads at their longest segment,
+// and one label per tree type on the tree nearest the type's centroid.
+// (Zones already carry their own name labels.)
+function Labels3D({ elements }: { elements: FarmElement[] }) {
+  const terrainEnabled = useStore(s => s.terrainEnabled);
+  const terrainData = useStore(s => s.terrainData);
+  const groundAt = (x: number, y: number) =>
+    terrainEnabled && isTerrainReady(terrainData) ? sampleTerrainHeight(terrainData, x, y) : 0;
+
+  const labels = useMemo(() => {
+    const out: Array<{ key: string; pos: [number, number, number]; size: number; text: string }> = [];
+    for (const el of elements) {
+      if (el.type === 'structure' && el.name) {
+        out.push({
+          key: `s-${el.id}`,
+          pos: [el.x, groundAt(el.x, el.y) + (el.elevation || 12) + 7, -el.y],
+          size: 10,
+          text: el.name,
+        });
+      } else if (el.type === 'infrastructure' && el.subtype === 'driveway' && el.name) {
+        out.push({
+          key: `s-${el.id}`,
+          pos: [el.x, groundAt(el.x, el.y) + 7, -el.y],
+          size: 9,
+          text: el.name,
+        });
+      }
+    }
+    const bySubtype = new Map<string, FarmElement[]>();
+    for (const el of elements) {
+      if (el.type !== 'tree') continue;
+      const k = el.subtype || 'tree';
+      if (!bySubtype.has(k)) bySubtype.set(k, []);
+      bySubtype.get(k)!.push(el);
+    }
+    for (const [subtype, trees] of bySubtype) {
+      const cx = trees.reduce((s, t) => s + t.x, 0) / trees.length;
+      const cy = trees.reduce((s, t) => s + t.y, 0) / trees.length;
+      let best = trees[0];
+      let bd = Infinity;
+      for (const t of trees) {
+        const d = (t.x - cx) ** 2 + (t.y - cy) ** 2;
+        if (d < bd) { bd = d; best = t; }
+      }
+      out.push({
+        key: `t-${subtype}`,
+        pos: [best.x, groundAt(best.x, best.y) + (best.elevation || 20) + 8, -best.y],
+        size: 10,
+        text: SPECIES_LABELS[subtype] || subtype.replace(/_/g, ' '),
+      });
+    }
+    const overlays = farmConfig.overlays || [];
+    overlays.forEach((ov, i) => {
+      if (!ov.name || !ov.width || ov.points.length < 2) return;
+      let bx = 0;
+      let by = 0;
+      let bl = -1;
+      for (let j = 0; j + 1 < ov.points.length; j++) {
+        const a = ov.points[j];
+        const b = ov.points[j + 1];
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len > bl) { bl = len; bx = (a.x + b.x) / 2; by = (a.y + b.y) / 2; }
+      }
+      out.push({ key: `r-${i}`, pos: [bx, groundAt(bx, by) + 6, -by], size: 9, text: ov.name });
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements, terrainEnabled, terrainData]);
+
+  return (
+    <>
+      {labels.map(l => (
+        <Text
+          key={l.key}
+          position={l.pos}
+          fontSize={l.size}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={l.size * 0.07}
+          outlineColor="#20241e"
+        >
+          {l.text}
+        </Text>
+      ))}
+    </>
   );
 }
 
@@ -215,32 +306,93 @@ function BoundaryLine() {
   );
 }
 
-// Overlay lines (clearing edges, fence lines, etc.) — draped like the boundary
+// Overlay lines and roads. An overlay with a `width` in the config is a
+// road or track: it renders as a terrain-draped ribbon of that width
+// (hairlines are 1 px at every zoom, which made the roads vanish). Plain
+// overlays (clearing edges, fence lines) stay lines. Segments are
+// subdivided before draping so long straight runs follow the terrain
+// instead of cutting through rises.
 function OverlayLines() {
   const overlays = farmConfig.overlays || [];
   const terrainEnabled = useStore(s => s.terrainEnabled);
   const terrainData = useStore(s => s.terrainData);
   const planView = useStore(s => s.planView);
   const drape = !planView && terrainEnabled && isTerrainReady(terrainData);
+  const lift = planView ? 0.12 : 0.35;
+  const heightAt = (x: number, y: number) =>
+    (drape ? sampleTerrainHeight(terrainData, x, y) : 0) + lift;
 
   return (
     <>
       {overlays.map((overlay, idx) => {
         if (overlay.points.length < 2) return null;
-        const pts = overlay.points.map(p => new THREE.Vector3(
-          p.x,
-          (drape ? sampleTerrainHeight(terrainData, p.x, p.y) : 0) + 0.3,
-          -p.y,
+        const color = overlay.color || '#88aa66';
+        const opacity = overlay.opacity ?? 0.4;
+
+        if (overlay.width) {
+          // Ribbon: one quad per (subdivided) segment, offset ±width/2
+          // along the segment's perpendicular.
+          const hw = overlay.width / 2;
+          const positions: number[] = [];
+          const indices: number[] = [];
+          let vi = 0;
+          for (let j = 0; j + 1 < overlay.points.length; j++) {
+            const a = overlay.points[j];
+            const b = overlay.points[j + 1];
+            const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+            if (segLen < 0.01) continue;
+            const steps = Math.max(1, Math.ceil(segLen / 10));
+            const dx = (b.x - a.x) / segLen;
+            const dy = (b.y - a.y) / segLen;
+            const px = -dy * hw;
+            const py = dx * hw;
+            for (let sIdx = 0; sIdx < steps; sIdx++) {
+              const t0 = sIdx / steps;
+              const t1 = (sIdx + 1) / steps;
+              const x0 = a.x + (b.x - a.x) * t0;
+              const y0 = a.y + (b.y - a.y) * t0;
+              const x1 = a.x + (b.x - a.x) * t1;
+              const y1 = a.y + (b.y - a.y) * t1;
+              positions.push(
+                x0 + px, heightAt(x0 + px, y0 + py), -(y0 + py),
+                x0 - px, heightAt(x0 - px, y0 - py), -(y0 - py),
+                x1 + px, heightAt(x1 + px, y1 + py), -(y1 + py),
+                x1 - px, heightAt(x1 - px, y1 - py), -(y1 - py),
+              );
+              indices.push(vi, vi + 1, vi + 2, vi + 1, vi + 3, vi + 2);
+              vi += 4;
+            }
+          }
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+          geo.setIndex(indices);
+          return (
+            <mesh key={idx} geometry={geo} renderOrder={2}>
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+              />
+            </mesh>
+          );
+        }
+
+        const pts = overlay.points.map(pt => new THREE.Vector3(
+          pt.x,
+          heightAt(pt.x, pt.y),
+          -pt.y,
         ));
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
         return (
           <line key={idx}>
             <bufferGeometry attach="geometry" {...geo} />
             <lineBasicMaterial
-              color={overlay.color || '#88aa66'}
+              color={color}
               linewidth={1}
               transparent
-              opacity={overlay.opacity ?? 0.4}
+              opacity={opacity}
             />
           </line>
         );
@@ -1118,6 +1270,7 @@ function Scene() {
       )}
 
       {/* Edit gizmo — rendered at scene level, decoupled from element re-renders */}
+      {!planView && <Labels3D elements={filtered} />}
       {editMode && !planView && <EditGizmo />}
 
       {/* Click on ground to deselect / exit edit mode */}
