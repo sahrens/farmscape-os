@@ -8,7 +8,7 @@ import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 import { TerrainMesh } from './TerrainMesh';
 import { sampleTerrainHeight, isTerrainReady } from '@/lib/terrain';
 import { compositeExtent, buildCompositeTexture } from '@/lib/composite';
-import { PlanSymbol, PlanCameraController } from './PlanView';
+import { PlanSymbol, PlanCameraController, PlanLabels } from './PlanView';
 
 // ─── Error boundary ───────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: string }
@@ -1032,7 +1032,10 @@ function Scene() {
 
       {/* Farm elements — show plan symbols OR 3D meshes */}
       {planView ? (
-        filtered.map(el => <PlanSymbol key={el.id} el={el} />)
+        <>
+          {filtered.map(el => <PlanSymbol key={el.id} el={el} />)}
+          <PlanLabels elements={filtered} />
+        </>
       ) : (
         filtered.map(el => <ElementMesh key={el.id} el={el} />)
       )}

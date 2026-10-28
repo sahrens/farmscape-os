@@ -13,6 +13,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '@/lib/store';
+import { Text } from '@react-three/drei';
 import type { FarmElement } from '@/lib/types';
 import farmConfig, { DEFAULT_COLORS } from '@/farm.config';
 
@@ -469,4 +470,112 @@ export function PlanSymbol({ el }: { el: FarmElement }) {
     default:
       return null;
   }
+}
+
+// ─── Plan labels ────────────────────────────────────────────────────
+// Plan view text: every structure, zone and piece of infrastructure is
+// labeled with its name, each road (config overlay) is labeled at its
+// longest segment, and each tree type is labeled once — on the tree of
+// that type nearest the type's own centroid, so the name sits in the
+// middle of its planting rather than on an edge tree.
+
+const SPECIES_LABELS: Record<string, string> = {
+  breadfruit: 'ʻUlu (Breadfruit)',
+  avocado: 'Avocado',
+  citrus: 'Citrus',
+  cook_pine: 'Cook Pine',
+  ironwood: 'Ironwood',
+  mango: 'Mango',
+  royal_palm: 'Royal Palm',
+  macadamia: 'Macadamia',
+};
+
+function PlanText({ x, y, size, color, children }: {
+  x: number; y: number; size: number; color: string; children: string;
+}) {
+  return (
+    <Text
+      position={[x, 0.6, -y]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      fontSize={size}
+      color={color}
+      anchorX="center"
+      anchorY="middle"
+      outlineWidth={size * 0.09}
+      outlineColor="#f5f0e8"
+    >
+      {children}
+    </Text>
+  );
+}
+
+export function PlanLabels({ elements }: { elements: FarmElement[] }) {
+  const labels = useMemo(() => {
+    const out: Array<{ key: string; x: number; y: number; size: number; color: string; text: string }> = [];
+
+    for (const el of elements) {
+      if (el.type === 'tree') continue;
+      if (el.subtype === 'boundary_marker') continue;
+      if (el.name) {
+        out.push({ key: `el-${el.id}`, x: el.x, y: el.y, size: 7, color: '#2f2a24', text: el.name });
+      }
+    }
+
+    const bySubtype = new Map<string, FarmElement[]>();
+    for (const el of elements) {
+      if (el.type !== 'tree') continue;
+      const k = el.subtype || 'tree';
+      if (!bySubtype.has(k)) bySubtype.set(k, []);
+      bySubtype.get(k)!.push(el);
+    }
+    for (const [subtype, trees] of bySubtype) {
+      const cx = trees.reduce((s, t) => s + t.x, 0) / trees.length;
+      const cy = trees.reduce((s, t) => s + t.y, 0) / trees.length;
+      let best = trees[0];
+      let bd = Infinity;
+      for (const t of trees) {
+        const d = (t.x - cx) ** 2 + (t.y - cy) ** 2;
+        if (d < bd) { bd = d; best = t; }
+      }
+      const canopy = best.width || 20;
+      out.push({
+        key: `sp-${subtype}`,
+        x: best.x,
+        y: best.y + canopy / 2 + 8,
+        size: 8,
+        color: '#274d1f',
+        text: SPECIES_LABELS[subtype] || subtype.replace(/_/g, ' '),
+      });
+    }
+
+    const overlays = (farmConfig.overlays || []) as Array<{
+      name?: string;
+      points: Array<{ x: number; y: number }>;
+    }>;
+    overlays.forEach((ov, i) => {
+      if (!ov.name || !ov.points || ov.points.length < 2) return;
+      let bx = 0;
+      let by = 0;
+      let bl = -1;
+      for (let j = 0; j + 1 < ov.points.length; j++) {
+        const a = ov.points[j];
+        const b = ov.points[j + 1];
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len > bl) { bl = len; bx = (a.x + b.x) / 2; by = (a.y + b.y) / 2; }
+      }
+      out.push({ key: `ov-${i}`, x: bx, y: by, size: 7.5, color: '#5a5348', text: ov.name });
+    });
+
+    return out;
+  }, [elements]);
+
+  return (
+    <>
+      {labels.map(l => (
+        <PlanText key={l.key} x={l.x} y={l.y} size={l.size} color={l.color}>
+          {l.text}
+        </PlanText>
+      ))}
+    </>
+  );
 }
